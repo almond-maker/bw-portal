@@ -1,32 +1,420 @@
-export const handler = async (event) => {
-  const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' }
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers }
-  try {
-    const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEET_ID, SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env
-    if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY || !GOOGLE_SHEET_ID) {
-      return { statusCode: 200, headers, body: JSON.stringify({ success: false, error: 'Google credentials not configured' }) }
-    }
-    const now = Math.floor(Date.now() / 1000)
-    const claim = { iss: GOOGLE_SERVICE_ACCOUNT_EMAIL, scope: 'https://www.googleapis.com/auth/spreadsheets.readonly', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }
-    const crypto = await import('crypto')
-    const hdr = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
-    const pl = Buffer.from(JSON.stringify(claim)).toString('base64url')
-    const signable = `${hdr}.${pl}`
-    const key = GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    const sign = crypto.createSign('RSA-SHA256'); sign.update(signable)
-    const jwt = `${signable}.${sign.sign(key, 'base64url')}`
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}` })
-    const tokenData = await tokenRes.json()
-    if (!tokenData.access_token) return { statusCode: 200, headers, body: JSON.stringify({ success: false, error: 'Google auth failed' }) }
-    const sheetRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/Sheet1!A2:I50`, { headers: { Authorization: `Bearer ${tokenData.access_token}` } })
-    const rows = (await sheetRes.json()).values || []
-    const clientMap = { 'dreambody': 'c1', 'figma': 'c2', 'geniesweb': 'c3', 'genies web': 'c3', 'genies': 'c4', 'hook': 'c5', 'jabali': 'c6', 'playful': 'c7', 'simz': 'c8', 'tea': 'c9', 'watched': 'c10', 'zora': 'c11' }
-    const scopeRows = rows.map(row => { const n = (row[0]||'').trim().toLowerCase(); const cid = clientMap[n]; if (!cid) return null; return { client_id: cid, live_posts: parseInt(row[1])||0, scope_goal: parseInt(row[2])||0, progress: parseFloat(row[3])||0, videos_left: parseInt(row[4])||0, scope_start: (row[5]||'').trim(), scope_end: (row[6]||'').trim(), scope_notes: (row[7]||'').trim(), standup_notes: (row[8]||'').trim(), refreshed_at: new Date().toISOString() } }).filter(Boolean)
-    if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
-      for (const row of scopeRows) {
-        await fetch(`${SUPABASE_URL}/rest/v1/scope_data`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Prefer': 'return=minimal' }, body: JSON.stringify(row) })
-      }
-    }
-    return { statusCode: 200, headers, body: JSON.stringify({ success: true, count: scopeRows.length, data: scopeRows }) }
-  } catch (err) { return { statusCode: 500, headers, body: JSON.stringify({ success: false, error: err.message }) } }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BW Club — PM Agency Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:#0B0C10;color:#ECEAE5}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+select option{background:#14151B;color:#ECEAE5}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0B0C10}
+::-webkit-scrollbar-thumb{background:#262733;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── CONFIG ─────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://ybkysfhsnpvqayhtaknx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Hhntaf2L8SKdmIsVSySYWA_6gYKMEkG';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─── COLORS ─────────────────────────────────────────────────────────────
+const C = {
+  bg:'#0B0C10',surface:'#14151B',alt:'#1A1B23',hover:'#1E1F28',border:'#262733',
+  accent:'#C9A84C',accentDim:'#C9A84C25',accentGlow:'#C9A84C10',accentMed:'#C9A84C50',
+  text:'#ECEAE5',sub:'#908F9A',muted:'#5A596A',
+  green:'#4ADE80',greenDim:'#4ADE8018',red:'#F87171',redDim:'#F8717118',
+  yellow:'#FBBF24',yellowDim:'#FBBF2418',blue:'#60A5FA',blueDim:'#60A5FA18',
+  purple:'#A78BFA',purpleDim:'#A78BFA18',orange:'#FB923C',orangeDim:'#FB923C18',
+};
+const F = {body:"'DM Sans',sans-serif",display:"'Playfair Display',serif"};
+
+// ─── SHARED UI ──────────────────────────────────────────────────────────
+const Badge=({label,color,bg})=><span style={{display:'inline-flex',padding:'3px 10px',borderRadius:20,fontSize:10.5,fontWeight:650,color,background:bg,letterSpacing:'0.03em'}}>{label}</span>;
+
+function MetricTile({label,value,prev,format,invert}){
+  const fmt=(v)=>format==='$'?`$${parseFloat(v||0).toFixed(2)}`:format==='%'?`${v}%`:(v||0).toLocaleString();
+  let tc=C.muted;
+  if(prev!=null&&prev>0){const up=value>prev;tc=(invert?!up:up)?C.green:C.red}
+  return <div style={{background:C.alt,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 18px',flex:1,minWidth:115}}>
+    <div style={{fontSize:10,color:C.muted,fontWeight:650,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>{label}</div>
+    <div style={{fontSize:22,fontWeight:700,letterSpacing:'-0.02em'}}>{fmt(value)}</div>
+    {prev!=null&&<div style={{marginTop:5,fontSize:11,color:tc,fontWeight:600}}>vs {fmt(prev)} prev</div>}
+  </div>;
 }
+
+function ScopeBar({current,goal}){
+  const pct=goal>0?Math.min(Math.max((current/goal)*100,0),150):0;
+  const display=Math.min(pct,100);const color=pct>=90?C.green:pct>=60?C.yellow:C.red;const over=pct>100;
+  return <div>
+    <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.sub,marginBottom:4}}>
+      <span>{current}/{goal} videos</span><span style={{color:over?C.green:color,fontWeight:600}}>{over?`${pct.toFixed(0)}% ✓`:`${pct.toFixed(0)}%`}</span>
+    </div>
+    <div style={{height:6,background:C.border,borderRadius:3,overflow:'hidden'}}>
+      <div style={{height:'100%',width:`${display}%`,background:color,borderRadius:3,transition:'width 0.4s ease'}}/>
+    </div>
+  </div>;
+}
+
+const Card=({children,style:sx,glow,onClick,hoverable})=>{
+  const[h,setH]=useState(false);
+  return <div onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{background:glow?C.accentGlow:C.surface,border:`1px solid ${glow?C.accentMed:h&&hoverable?C.accentMed:C.border}`,borderRadius:12,padding:24,cursor:onClick?'pointer':'default',transition:'all 0.2s',...sx}}>{children}</div>;
+};
+const Btn=({children,onClick,disabled,variant='primary',sx})=><button onClick={disabled?undefined:onClick} style={{border:variant==='outline'?`1px solid ${C.accent}40`:'none',background:variant==='primary'?C.accent:'transparent',color:variant==='primary'?C.bg:variant==='outline'?C.accent:C.sub,borderRadius:8,padding:variant==='ghost'?'8px 12px':'10px 20px',fontWeight:600,fontSize:13,cursor:disabled?'default':'pointer',fontFamily:F.body,opacity:disabled?0.35:1,transition:'all 0.15s',...sx}}>{children}</button>;
+const Label=({children})=><div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>{children}</div>;
+const SH=({children,color:cl})=><div style={{fontSize:10.5,fontWeight:700,color:cl||C.accent,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16}}>{children}</div>;
+const Inp=(props)=><input {...props} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',color:C.text,fontSize:13,fontFamily:F.body,outline:'none',boxSizing:'border-box',...props.style}}/>;
+const Txa=(props)=><textarea {...props} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 14px',color:C.text,fontSize:13,fontFamily:F.body,outline:'none',resize:'vertical',minHeight:90,boxSizing:'border-box',lineHeight:1.6,...props.style}}/>;
+const Div=()=><div style={{height:1,background:C.border,margin:'20px 0'}}/>;
+const Sel=({value,onChange,children})=><select value={value} onChange={onChange} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',color:C.text,fontSize:13,fontFamily:F.body,cursor:'pointer'}}>{children}</select>;
+
+// ═══════════════════════════════════════════════════════════════════════
+function App(){
+  const[user,setUser]=useState(null);
+  const[users,setUsers]=useState([]);
+  const[clients,setClients]=useState([]);
+  const[scopeData,setScopeData]=useState({});
+  const[contentMetrics,setCM]=useState([]);
+  const[adMetrics,setAM]=useState([]);
+  const[topPerformers,setTP]=useState([]);
+  const[analyses,setAn]=useState([]);
+  const[fbMap,setFb]=useState({});
+  const[view,setView]=useState('dashboard');
+  const[selEntry,setSelEntry]=useState(null);
+  const[selAnalysis,setSelAnalysis]=useState(null);
+  const[aiLoading,setAiLoading]=useState(false);
+  const[aiResult,setAiResult]=useState(null);
+  const[extracting,setExtracting]=useState(false);
+  const[extractedData,setExtractedData]=useState(null);
+  const[sheetRefreshing,setSheetRefreshing]=useState(false);
+  const[loading,setLoading]=useState(true);
+
+  // ─── Load Data ──────────────────────────────────────────────────────
+  const loadData=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const[uR,cR,sR,cmR,amR,tpR,anR,fbR]=await Promise.all([
+        sb.from('users').select('*'),
+        sb.from('clients').select('*'),
+        sb.from('scope_data').select('*').order('refreshed_at',{ascending:false}),
+        sb.from('content_metrics').select('*').order('created_at',{ascending:false}),
+        sb.from('ad_metrics').select('*').order('created_at',{ascending:false}),
+        sb.from('top_performers').select('*').order('created_at',{ascending:false}),
+        sb.from('analyses').select('*').order('created_at',{ascending:false}),
+        sb.from('feedback').select('*'),
+      ]);
+      if(uR.data)setUsers(uR.data);
+      if(cR.data)setClients(cR.data);
+      if(sR.data){const m={};sR.data.forEach(r=>{if(!m[r.client_id])m[r.client_id]=r});setScopeData(m)}
+      if(cmR.data)setCM(cmR.data.map(r=>({id:r.id,clientId:r.client_id,period:r.period,date:r.created_at,videosPosted:r.videos_posted,totalViews:r.total_views,engagementRate:r.engagement_rate,likes:r.likes,comments:r.comments,shares:r.shares,avgViews:r.avg_views,topVideoViews:r.top_video_views,topNotes:r.top_notes,bottomNotes:r.bottom_notes})));
+      if(amR.data)setAM(amR.data.map(r=>({id:r.id,clientId:r.client_id,period:r.period,date:r.created_at,adSpend:r.ad_spend,impressions:r.impressions,clicks:r.clicks,ctr:r.ctr,cpa:r.cpa,conversions:r.conversions,cpm:r.cpm,roas:r.roas,adNotes:r.ad_notes})));
+      if(tpR.data)setTP(tpR.data.map(r=>({id:r.id,clientId:r.client_id,type:r.type,title:r.title,tiktokLink:r.tiktok_link,adLink:r.ad_link,notes:r.notes,fileName:r.file_name,fileUrl:r.file_url,date:r.created_at})));
+      if(anR.data)setAn(anR.data.map(r=>({id:r.id,entryId:r.entry_id,clientId:r.client_id,pmId:r.pm_id,snapshot:r.snapshot,questions:r.questions,answers:r.answers,actionItem:r.action_item,status:r.status,date:r.created_at})));
+      if(fbR.data){const m={};fbR.data.forEach(r=>{m[r.analysis_id]={adminId:r.admin_id,comment:r.comment,date:r.created_at}});setFb(m)}
+    }catch(e){console.error('Load failed:',e)}
+    setLoading(false);
+  },[]);
+  useEffect(()=>{loadData()},[loadData]);
+
+  const isAdmin=user?.role==='admin';const isAds=user?.role==='ads';const isPM=user?.role==='pm';
+  const myClients=isAdmin||isAds?clients:clients.filter(cl=>cl.assigned_pm===user?.id);
+  const getPM=(pid)=>users.find(u=>u.id===pid);
+  const nav=(v)=>{setView(v);setSelEntry(null);setSelAnalysis(null);setAiResult(null);setExtractedData(null)};
+  const getCD=(cid)=>{const cm=contentMetrics.filter(e=>e.clientId===cid).sort((a,b)=>new Date(b.date)-new Date(a.date));const am=adMetrics.filter(e=>e.clientId===cid).sort((a,b)=>new Date(b.date)-new Date(a.date));return{latest:cm[0],prev:cm[1],latestAd:am[0],prevAd:am[1]}};
+  const getAn=(eid)=>analyses.find(a=>a.entryId===eid);
+  const getTP=(cid)=>topPerformers.filter(tp=>tp.clientId===cid);
+  const pendingReviews=isAdmin?analyses.filter(a=>a.status==='submitted'):[];
+  const awaiting=isPM?contentMetrics.filter(e=>{const cl=clients.find(cc=>cc.id===e.clientId);return cl?.assigned_pm===user?.id&&!getAn(e.id)}):[];
+
+  // ─── Sheet Refresh ────────────────────────────────────────────────
+  async function refreshSheet(){
+    setSheetRefreshing(true);
+    try{
+      const res=await fetch('/.netlify/functions/refresh-sheet');const data=await res.json();
+      if(data.success&&data.data){const m={};data.data.forEach(r=>{m[r.client_id]=r});setScopeData(m)}
+    }catch(e){console.error('Sheet refresh failed:',e)}
+    setSheetRefreshing(false);
+  }
+
+  // ─── Claude API ───────────────────────────────────────────────────
+  async function callClaude(messages){
+    const res=await fetch('/.netlify/functions/claude-api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,max_tokens:1000})});
+    return await res.json();
+  }
+
+  async function extractFromScreenshot(file,type){
+    setExtracting(true);setExtractedData(null);
+    try{
+      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej();r.readAsDataURL(file)});
+      const prompt=type==='content'?'Extract metrics from this Growi dashboard screenshot. Return ONLY JSON: {"videosPosted":0,"totalViews":0,"engagementRate":0,"likes":0,"comments":0,"shares":0,"avgViews":0,"topVideoViews":0,"notes":""}':'Extract ad metrics from this TikTok Ads Manager screenshot. Return ONLY JSON: {"adSpend":0,"impressions":0,"clicks":0,"ctr":0,"cpa":0,"conversions":0,"cpm":0,"roas":0,"notes":""}';
+      const data=await callClaude([{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type||'image/png',data:base64}},{type:'text',text:prompt}]}]);
+      const txt=data.content?.map(i=>i.text||'').join('')||'';
+      setExtractedData(JSON.parse(txt.replace(/```json|```/g,'').trim()));
+    }catch(e){
+      console.error('Extract:',e);
+      setExtractedData(type==='content'?{videosPosted:0,totalViews:0,engagementRate:0,likes:0,comments:0,shares:0,avgViews:0,topVideoViews:0,notes:'Could not extract — enter manually'}:{adSpend:0,impressions:0,clicks:0,ctr:0,cpa:0,conversions:0,cpm:0,roas:0,notes:'Could not extract — enter manually'});
+    }
+    setExtracting(false);
+  }
+
+  async function genDiagnostics(client,entry,prev,adData,prevAd,scope){
+    setAiLoading(true);setAiResult(null);
+    try{
+      const prompt=`You are an expert TikTok UGC strategist for BW Club. Force the PM to think strategically.\n\nCLIENT: ${client.name} | ${client.industry||'N/A'}\n${scope?`SCOPE: ${scope.live_posts}/${scope.scope_goal} (${scope.progress}%) | ${scope.videos_left>0?scope.videos_left+' left':Math.abs(scope.videos_left)+' over'} | ${scope.scope_start}→${scope.scope_end}\n${scope.scope_notes?'Notes: '+scope.scope_notes:''}\n${scope.standup_notes?'Standup: '+scope.standup_notes:''}`:''}\nCONTENT: Videos:${entry.videosPosted} Views:${entry.totalViews} Eng:${entry.engagementRate}% AvgViews:${entry.avgViews}\n${prev?`PREV: Videos:${prev.videosPosted} Views:${prev.totalViews} Eng:${prev.engagementRate}%`:''}\n${adData?`ADS: Spend:$${adData.adSpend} CPA:$${adData.cpa} Conv:${adData.conversions} CTR:${adData.ctr}%`:''}\n${entry.topNotes?`Top: ${entry.topNotes}`:''} ${entry.bottomNotes?`Bottom: ${entry.bottomNotes}`:''}\n\nGenerate 4 diagnostic questions referencing specific numbers, connecting creative to outcomes, factoring scope pacing, pushing toward action. Plus 2-3 sentence snapshot.\nJSON only: {"snapshot":"...","questions":["...","...","...","..."]}`;
+      const data=await callClaude([{role:'user',content:prompt}]);
+      const txt=data.content?.map(i=>i.text||'').join('')||'';
+      setAiResult(JSON.parse(txt.replace(/```json|```/g,'').trim()));
+    }catch{setAiResult({snapshot:'Unable to generate AI analysis.',questions:['What content changes affected performance?','Which creator drove strongest results?','How does pacing affect strategy?','What would you change next period?']})}
+    setAiLoading(false);
+  }
+
+  // ─── Supabase Writes ──────────────────────────────────────────────
+  async function submitCM(data){const id=`cm_${Date.now()}`;await sb.from('content_metrics').insert({id,client_id:data.clientId,period:data.period,videos_posted:data.videosPosted,total_views:data.totalViews,engagement_rate:data.engagementRate,likes:data.likes,comments:data.comments,shares:data.shares,avg_views:data.avgViews,top_video_views:data.topVideoViews,top_notes:data.topNotes,bottom_notes:data.bottomNotes,submitted_by:user.id});setCM(p=>[{...data,id,date:new Date().toISOString()},...p]);return id}
+  async function submitAM(data){const id=`am_${Date.now()}`;await sb.from('ad_metrics').insert({id,client_id:data.clientId,period:data.period,ad_spend:data.adSpend,impressions:data.impressions,clicks:data.clicks,ctr:data.ctr,cpa:data.cpa,conversions:data.conversions,cpm:data.cpm,roas:data.roas,ad_notes:data.adNotes,submitted_by:user.id});setAM(p=>[{...data,id,date:new Date().toISOString()},...p])}
+  async function submitTPF(data){const id=`tp_${Date.now()}`;await sb.from('top_performers').insert({id,client_id:data.clientId,type:data.type,title:data.title,tiktok_link:data.tiktokLink,ad_link:data.adLink,notes:data.notes,file_name:data.fileName,file_url:'',submitted_by:user.id});setTP(p=>[{...data,id,date:new Date().toISOString()},...p])}
+  async function submitAnaly(data){const id=`a_${Date.now()}`;await sb.from('analyses').insert({id,entry_id:data.entryId,client_id:data.clientId,pm_id:user.id,snapshot:data.snapshot,questions:data.questions,answers:data.answers,action_item:data.actionItem,status:'submitted'});setAn(p=>[{...data,id,pmId:user.id,status:'submitted',date:new Date().toISOString()},...p])}
+  async function submitFB(aId,comment){await sb.from('feedback').insert({analysis_id:aId,admin_id:user.id,comment});await sb.from('analyses').update({status:'reviewed'}).eq('id',aId);setFb(p=>({...p,[aId]:{adminId:user.id,comment,date:new Date().toISOString()}}));setAn(p=>p.map(a=>a.id===aId?{...a,status:'reviewed'}:a))}
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LOADING
+  if(loading)return <div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{textAlign:'center'}}><div style={{fontSize:20,animation:'spin 1s linear infinite',marginBottom:12}}>⟳</div><div style={{color:C.sub}}>Loading portal...</div></div></div>;
+
+  // LOGIN
+  if(!user)return(
+    <div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:48}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.accent,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:14}}>BW Club</div>
+        <h1 style={{fontFamily:F.display,fontSize:38,fontWeight:600,margin:0}}>PM Agency Portal</h1>
+        <p style={{color:C.sub,marginTop:10}}>Select your profile to continue</p>
+      </div>
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
+        {users.map(u=><div key={u.id} onClick={()=>{setUser(u);setView('dashboard')}} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'24px',cursor:'pointer',textAlign:'center',minWidth:110,transition:'all 0.2s'}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          <div style={{width:42,height:42,borderRadius:'50%',background:u.role==='admin'?C.accentDim:u.role==='ads'?C.orangeDim:C.blueDim,color:u.role==='admin'?C.accent:u.role==='ads'?C.orange:C.blue,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,margin:'0 auto 10px'}}>{u.avatar}</div>
+          <div style={{fontWeight:600,fontSize:13}}>{u.name}</div>
+          <div style={{fontSize:10,color:C.muted,marginTop:3,textTransform:'uppercase'}}>{u.title}</div>
+        </div>)}
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CONTENT UPLOAD
+  function ContentUploadView(){
+    const[cid,setCid]=useState('');const[period,setPeriod]=useState('mon');const[ss,setSS]=useState(null);const[preview,setPrev]=useState(null);
+    const[topN,setTopN]=useState('');const[botN,setBotN]=useState('');const[ov,setOv]=useState({});const fRef=useRef();
+    const gv=(k)=>ov[k]!==undefined?ov[k]:(extractedData?.[k]??'');
+    const submit=async()=>{if(!cid)return;await submitCM({clientId:cid,period,videosPosted:parseFloat(gv('videosPosted'))||0,totalViews:parseFloat(gv('totalViews'))||0,engagementRate:parseFloat(gv('engagementRate'))||0,likes:parseFloat(gv('likes'))||0,comments:parseFloat(gv('comments'))||0,shares:parseFloat(gv('shares'))||0,avgViews:parseFloat(gv('avgViews'))||0,topVideoViews:parseFloat(gv('topVideoViews'))||0,topNotes:topN,bottomNotes:botN});nav('dashboard')};
+    return <div style={{maxWidth:760}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>Upload Content Metrics</h1>
+      <p style={{color:C.sub,marginBottom:28}}>Screenshot Growi → Claude extracts → confirm & submit.</p>
+      <Card>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <div><Label>Client</Label><Sel value={cid} onChange={e=>setCid(e.target.value)}><option value=''>Select...</option>{clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}</Sel></div>
+          <div><Label>Period</Label><Sel value={period} onChange={e=>setPeriod(e.target.value)}><option value='mon'>Monday (Weekend)</option><option value='thu'>Thursday (EOW)</option></Sel></div>
+        </div>
+        <Div/>
+        <Label>Growi Screenshot</Label>
+        <div onClick={()=>fRef.current?.click()} style={{background:C.bg,border:`2px dashed ${C.border}`,borderRadius:10,padding:preview?'12px':'32px 20px',textAlign:'center',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          {preview?<img src={preview} style={{maxWidth:'100%',maxHeight:250,borderRadius:8}}/>:<div style={{color:C.muted}}>Click to upload screenshot</div>}
+          <input ref={fRef} type='file' accept='image/*' style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setSS(f);setPrev(URL.createObjectURL(f));setExtractedData(null)}}}/>
+        </div>
+        {ss&&!extractedData&&!extracting&&<div style={{marginTop:14,textAlign:'center'}}><Btn onClick={()=>extractFromScreenshot(ss,'content')}>Extract with Claude</Btn></div>}
+        {extracting&&<div style={{marginTop:14,textAlign:'center',color:C.sub}}><span style={{display:'inline-block',animation:'spin 1s linear infinite'}}>⟳</span> Reading screenshot...</div>}
+        {(extractedData||!ss)&&<><Div/>{extractedData&&<div style={{marginBottom:16,padding:'10px 14px',background:C.accentGlow,borderRadius:8,border:`1px solid ${C.accentMed}`,fontSize:12,color:C.accent}}>✓ Extracted — review and adjust</div>}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:12}}>{[['videosPosted','Videos'],['totalViews','Views'],['engagementRate','Eng %'],['likes','Likes'],['comments','Comments'],['shares','Shares'],['avgViews','Avg Views'],['topVideoViews','Top Video']].map(([k,l])=><div key={k}><Label>{l}</Label><Inp type='number' value={gv(k)} onChange={e=>setOv(p=>({...p,[k]:e.target.value}))} placeholder='0'/></div>)}</div></>}
+        <Div/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <div><Label>Top Performer Notes</Label><Txa value={topN} onChange={e=>setTopN(e.target.value)} placeholder='Best content...' rows={3}/></div>
+          <div><Label>Bottom Notes</Label><Txa value={botN} onChange={e=>setBotN(e.target.value)} placeholder='Underperformers...' rows={3}/></div>
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:20}}><Btn variant='outline' onClick={()=>nav('dashboard')}>Cancel</Btn><Btn disabled={!cid} onClick={submit}>Submit</Btn></div>
+      </Card>
+    </div>;
+  }
+
+  // ADS UPLOAD
+  function AdsUploadView(){
+    const[cid,setCid]=useState('');const[period,setPeriod]=useState('mon');const[ss,setSS]=useState(null);const[preview,setPrev]=useState(null);
+    const[adN,setAdN]=useState('');const[ov,setOv]=useState({});const fRef=useRef();
+    const gv=(k)=>ov[k]!==undefined?ov[k]:(extractedData?.[k]??'');
+    const submit=async()=>{if(!cid)return;await submitAM({clientId:cid,period,adSpend:parseFloat(gv('adSpend'))||0,impressions:parseFloat(gv('impressions'))||0,clicks:parseFloat(gv('clicks'))||0,ctr:parseFloat(gv('ctr'))||0,cpa:parseFloat(gv('cpa'))||0,conversions:parseFloat(gv('conversions'))||0,cpm:parseFloat(gv('cpm'))||0,roas:parseFloat(gv('roas'))||0,adNotes:adN});nav('dashboard')};
+    return <div style={{maxWidth:760}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>Upload Ad Metrics</h1>
+      <p style={{color:C.sub,marginBottom:28}}>Screenshot Ads Manager → Claude extracts → confirm & submit.</p>
+      <Card>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <div><Label>Client</Label><Sel value={cid} onChange={e=>setCid(e.target.value)}><option value=''>Select...</option>{clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}</Sel></div>
+          <div><Label>Period</Label><Sel value={period} onChange={e=>setPeriod(e.target.value)}><option value='mon'>Monday (Weekend)</option><option value='thu'>Thursday (EOW)</option></Sel></div>
+        </div>
+        <Div/>
+        <Label>Ads Manager Screenshot</Label>
+        <div onClick={()=>fRef.current?.click()} style={{background:C.bg,border:`2px dashed ${C.border}`,borderRadius:10,padding:preview?'12px':'32px 20px',textAlign:'center',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.orange} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          {preview?<img src={preview} style={{maxWidth:'100%',maxHeight:250,borderRadius:8}}/>:<div style={{color:C.muted}}>Click to upload screenshot</div>}
+          <input ref={fRef} type='file' accept='image/*' style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setSS(f);setPrev(URL.createObjectURL(f));setExtractedData(null)}}}/>
+        </div>
+        {ss&&!extractedData&&!extracting&&<div style={{marginTop:14,textAlign:'center'}}><Btn onClick={()=>extractFromScreenshot(ss,'ads')}>Extract with Claude</Btn></div>}
+        {extracting&&<div style={{marginTop:14,textAlign:'center',color:C.sub}}><span style={{display:'inline-block',animation:'spin 1s linear infinite'}}>⟳</span> Reading...</div>}
+        {(extractedData||!ss)&&<><Div/>{extractedData&&<div style={{marginBottom:16,padding:'10px 14px',background:C.orangeDim,borderRadius:8,border:`1px solid ${C.orange}40`,fontSize:12,color:C.orange}}>✓ Extracted — review</div>}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:12}}>{[['adSpend','Spend $'],['impressions','Impr.'],['clicks','Clicks'],['ctr','CTR %'],['cpa','CPA $'],['conversions','Conv.'],['cpm','CPM $'],['roas','ROAS']].map(([k,l])=><div key={k}><Label>{l}</Label><Inp type='number' value={gv(k)} onChange={e=>setOv(p=>({...p,[k]:e.target.value}))} placeholder='0'/></div>)}</div></>}
+        <Div/>
+        <div><Label>Ad Notes</Label><Txa value={adN} onChange={e=>setAdN(e.target.value)} placeholder='Which creatives winning?' rows={3}/></div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:20}}><Btn variant='outline' onClick={()=>nav('dashboard')}>Cancel</Btn><Btn disabled={!cid} onClick={submit}>Submit</Btn></div>
+      </Card>
+    </div>;
+  }
+
+  // TOP PERFORMERS
+  function TopPerfView(){
+    const[form,setForm]=useState({clientId:'',type:'video',title:'',tiktokLink:'',adLink:'',notes:'',fileName:''});
+    const fRef=useRef();const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+    const submit=async()=>{if(!form.clientId||!form.title)return;await submitTPF(form);setForm({clientId:'',type:'video',title:'',tiktokLink:'',adLink:'',notes:'',fileName:''})};
+    return <div style={{maxWidth:720}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>Upload Top Performers</h1>
+      <p style={{color:C.sub,marginBottom:28}}>Winning videos + ads for PMs to study.</p>
+      <Card>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <div><Label>Client</Label><Sel value={form.clientId} onChange={e=>set('clientId',e.target.value)}><option value=''>Select...</option>{clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}</Sel></div>
+          <div><Label>Type</Label><Sel value={form.type} onChange={e=>set('type',e.target.value)}><option value='video'>Top Video</option><option value='ad'>Top Ad</option></Sel></div>
+        </div>
+        <Div/>
+        <div><Label>Title</Label><Inp value={form.title} onChange={e=>set('title',e.target.value)} placeholder="'POV hook + product reveal — 2.1M views'"/></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
+          <div><Label>TikTok Link</Label><Inp value={form.tiktokLink} onChange={e=>set('tiktokLink',e.target.value)} placeholder='https://tiktok.com/...'/></div>
+          <div><Label>Ad Link</Label><Inp value={form.adLink} onChange={e=>set('adLink',e.target.value)} placeholder='Ad manager URL'/></div>
+        </div>
+        <div style={{marginTop:14}}><Label>Video File</Label><div onClick={()=>fRef.current?.click()} style={{background:C.bg,border:`2px dashed ${C.border}`,borderRadius:10,padding:'24px',textAlign:'center',cursor:'pointer'}}>{form.fileName?<span><span style={{color:C.green}}>✓</span> {form.fileName}</span>:<span style={{color:C.muted}}>.mp4, .mov</span>}<input ref={fRef} type='file' accept='video/*' style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)set('fileName',f.name)}}/></div></div>
+        <div style={{marginTop:14}}><Label>Why did this work?</Label><Txa value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder='Hook, pacing, CTA...' rows={3}/></div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:20}}><Btn variant='outline' onClick={()=>nav('dashboard')}>Cancel</Btn><Btn disabled={!form.clientId||!form.title} onClick={submit}>Upload</Btn></div>
+      </Card>
+      {topPerformers.length>0&&<div style={{marginTop:32}}><SH>Recent Uploads</SH>{topPerformers.slice(0,10).map(tp=>{const cl=clients.find(cc=>cc.id===tp.clientId);return <Card key={tp.id} style={{padding:'14px 20px',marginBottom:8}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:10}}><Badge label={tp.type==='ad'?'AD':'VIDEO'} color={tp.type==='ad'?C.purple:C.green} bg={tp.type==='ad'?C.purpleDim:C.greenDim}/><span style={{fontWeight:600}}>{cl?.name}</span><span style={{color:C.sub}}>{tp.title}</span></div><span style={{fontSize:11,color:C.muted}}>{new Date(tp.date).toLocaleDateString()}</span></div></Card>})}</div>}
+    </div>;
+  }
+
+  // PM ANALYSIS
+  function PMAnalysisView(){
+    const entry=selEntry;const client=clients.find(cl=>cl.id===entry?.clientId);
+    const{prev,latestAd,prevAd}=client?getCD(client.id):{};const scope=scopeData[client?.id];const performers=client?getTP(client.id):[];
+    const existing=getAn(entry?.id);const[answers,setAnswers]=useState(['','','','']);const[actionItem,setActionItem]=useState('');
+    useEffect(()=>{if(entry&&client&&!existing&&!aiResult)genDiagnostics(client,entry,prev,latestAd,prevAd,scope)},[entry?.id]);
+    useEffect(()=>{if(existing){setAnswers(existing.answers||['','','','']);setActionItem(existing.actionItem||'');if(!aiResult)setAiResult({snapshot:existing.snapshot,questions:existing.questions})}},[existing?.id]);
+    if(!entry||!client)return null;
+    const questions=aiResult?.questions||existing?.questions||[];const snapshot=aiResult?.snapshot||existing?.snapshot||'';
+    const allDone=questions.length>0&&answers.slice(0,questions.length).every(a=>a.trim())&&actionItem.trim();
+    const fb=fbMap[existing?.id];
+    const handleSubmit=async()=>{await submitAnaly({entryId:entry.id,clientId:client.id,snapshot,questions,answers:answers.slice(0,questions.length),actionItem});nav('dashboard')};
+    return <div style={{maxWidth:820}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <div style={{display:'flex',alignItems:'center',gap:14,margin:'20px 0 4px'}}><h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>{client.name}</h1>{existing&&<Badge label={existing.status==='reviewed'?'Reviewed':'Submitted'} color={existing.status==='reviewed'?C.blue:C.green} bg={existing.status==='reviewed'?C.blueDim:C.greenDim}/>}</div>
+      <p style={{color:C.muted,fontSize:12,marginBottom:24}}>{new Date(entry.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} · {entry.period==='mon'?'Weekend':'EOW'}</p>
+      {scope&&<Card style={{marginBottom:14,padding:'16px 20px'}}><SH color={C.yellow}>Scope Status</SH><ScopeBar current={scope.live_posts} goal={scope.scope_goal}/><div style={{display:'flex',gap:20,marginTop:10,fontSize:12,color:C.sub}}><span>{scope.videos_left>0?`${scope.videos_left} remaining`:`${Math.abs(scope.videos_left)} over`}</span><span>·</span><span>{scope.scope_start} → {scope.scope_end}</span></div>{scope.scope_notes&&<div style={{marginTop:8,fontSize:12,color:C.sub}}><span style={{color:C.yellow,fontWeight:600}}>Notes:</span> {scope.scope_notes}</div>}{scope.standup_notes&&<div style={{marginTop:4,fontSize:12,color:C.sub}}><span style={{color:C.yellow,fontWeight:600}}>Standup:</span> {scope.standup_notes}</div>}</Card>}
+      <SH>Content Metrics</SH>
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}><MetricTile label='Videos' value={entry.videosPosted} prev={prev?.videosPosted}/><MetricTile label='Views' value={entry.totalViews} prev={prev?.totalViews}/><MetricTile label='Eng.' value={entry.engagementRate} prev={prev?.engagementRate} format='%'/><MetricTile label='Avg Views' value={entry.avgViews} prev={prev?.avgViews}/></div>
+      {latestAd&&<><SH color={C.orange}>Ad Metrics</SH><div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}><MetricTile label='Spend' value={latestAd.adSpend} prev={prevAd?.adSpend} format='$'/><MetricTile label='CPA' value={latestAd.cpa} prev={prevAd?.cpa} format='$' invert/><MetricTile label='Conv.' value={latestAd.conversions} prev={prevAd?.conversions}/><MetricTile label='ROAS' value={latestAd.roas} prev={prevAd?.roas}/></div></>}
+      {(entry.topNotes||entry.bottomNotes)&&<Card style={{marginBottom:14,display:'flex',gap:20}}>{entry.topNotes&&<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>↑ Top</div><p style={{margin:0,fontSize:13,lineHeight:1.6,color:C.sub}}>{entry.topNotes}</p></div>}{entry.bottomNotes&&<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:C.red,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>↓ Bottom</div><p style={{margin:0,fontSize:13,lineHeight:1.6,color:C.sub}}>{entry.bottomNotes}</p></div>}</Card>}
+      {performers.length>0&&<Card style={{marginBottom:14}}><SH color={C.purple}>Top Performers</SH>{performers.slice(0,4).map(tp=><div key={tp.id} style={{background:C.bg,borderRadius:8,padding:'12px 16px',border:`1px solid ${C.border}`,marginBottom:8}}><div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}><Badge label={tp.type==='ad'?'AD':'VIDEO'} color={tp.type==='ad'?C.purple:C.green} bg={tp.type==='ad'?C.purpleDim:C.greenDim}/><span style={{fontWeight:600,fontSize:13}}>{tp.title}</span></div>{tp.tiktokLink&&<a href={tp.tiktokLink} target='_blank' rel='noreferrer' style={{color:C.accent,textDecoration:'none',fontSize:12}}>TikTok →</a>}{tp.notes&&<div style={{fontSize:12,color:C.sub,marginTop:4}}>{tp.notes}</div>}</div>)}</Card>}
+      {aiLoading&&<Card style={{textAlign:'center',padding:44,marginBottom:14}}><div style={{display:'inline-block',animation:'spin 1s linear infinite',fontSize:20}}>⟳</div><div style={{color:C.sub,marginTop:8}}>Generating diagnostics...</div></Card>}
+      {snapshot&&!aiLoading&&<Card glow style={{marginBottom:14}}><SH>Performance Snapshot</SH><p style={{margin:0,lineHeight:1.7,fontSize:14}}>{snapshot}</p></Card>}
+      {questions.length>0&&!aiLoading&&<Card style={{marginBottom:14}}>
+        <SH>Diagnostic Questions — Think Before You Answer</SH>
+        {questions.map((q,i)=><div key={i} style={{marginBottom:22}}><div style={{fontSize:14,fontWeight:600,marginBottom:8,lineHeight:1.55}}><span style={{color:C.accent,marginRight:8}}>Q{i+1}.</span>{q}</div><Txa value={answers[i]||''} onChange={e=>{const n=[...answers];n[i]=e.target.value;setAnswers(n)}} disabled={!!existing} placeholder={existing?'':'Your analysis...'} style={{minHeight:75,opacity:existing?0.8:1}}/></div>)}
+        <Div/>
+        <div><div style={{fontSize:14,fontWeight:600,marginBottom:8}}><span style={{color:C.accent,marginRight:8}}>→</span>Your #1 Action Item</div><Txa value={actionItem} onChange={e=>setActionItem(e.target.value)} disabled={!!existing} placeholder={existing?'':"What's the single most important thing you're changing?"} style={{minHeight:60,borderColor:C.accentMed}}/></div>
+        {!existing&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:20}}><Btn disabled={!allDone} onClick={handleSubmit} sx={{padding:'12px 28px'}}>Submit Analysis</Btn></div>}
+      </Card>}
+      {fb&&<Card style={{borderColor:C.blue+'40',background:C.blueDim}}><SH color={C.blue}>Feedback from {users.find(u=>u.id===fb.adminId)?.name}</SH><p style={{margin:0,lineHeight:1.7}}>{fb.comment}</p></Card>}
+    </div>;
+  }
+
+  // ADMIN REVIEW
+  function AdminReviewView(){
+    const a=selAnalysis;const entry=contentMetrics.find(e=>e.id===a?.entryId);const client=clients.find(cl=>cl.id===a?.clientId);const pm=users.find(u=>u.id===a?.pmId);const[comment,setComment]=useState('');
+    if(!a||!entry||!client)return null;
+    return <div style={{maxWidth:820}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <div style={{display:'flex',alignItems:'center',gap:14,margin:'20px 0 4px'}}><h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>{client.name}</h1><Badge label={`${pm?.name}'s Analysis`} color={C.accent} bg={C.accentDim}/></div>
+      {a.snapshot&&<Card glow style={{marginBottom:14,marginTop:20}}><SH>AI Snapshot</SH><p style={{margin:0,lineHeight:1.7}}>{a.snapshot}</p></Card>}
+      <Card style={{marginBottom:14}}><SH>PM Responses</SH>{a.questions?.map((q,i)=><div key={i} style={{marginBottom:16}}><div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:6}}><span style={{color:C.accent}}>Q{i+1}.</span> {q}</div><div style={{background:C.bg,borderRadius:8,padding:'12px 16px',fontSize:13,lineHeight:1.7,border:`1px solid ${C.border}`}}>{a.answers?.[i]||<span style={{color:C.muted}}>No answer</span>}</div></div>)}{a.actionItem&&<div><div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:6}}><span style={{color:C.accent}}>→</span> Action Item</div><div style={{background:C.bg,borderRadius:8,padding:'12px 16px',fontSize:13,lineHeight:1.7,border:`1px solid ${C.accentMed}`}}>{a.actionItem}</div></div>}</Card>
+      {a.status!=='reviewed'?<Card><SH color={C.blue}>Your Feedback</SH><Txa value={comment} onChange={e=>setComment(e.target.value)} placeholder='Coach them...'/><div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}><Btn disabled={!comment.trim()} onClick={async()=>{await submitFB(a.id,comment);nav('dashboard')}}>Submit Feedback</Btn></div></Card>:<Card style={{borderColor:C.blue+'40',background:C.blueDim}}><SH color={C.blue}>Feedback Sent</SH><p style={{margin:0,lineHeight:1.7}}>{fbMap[a.id]?.comment}</p></Card>}
+    </div>;
+  }
+
+  // DASHBOARD
+  function DashboardView(){
+    return <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28}}>
+        <div><h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>{isPM?'My Clients':isAds?'Ad Metrics':'Operations Dashboard'}</h1><p style={{color:C.sub,marginTop:4,fontSize:13}}>{isAdmin?`${pendingReviews.length} pending review${pendingReviews.length!==1?'s':''}`:isPM?`${awaiting.length} ready for analysis`:'Upload ad data per client'}</p></div>
+        {isAdmin&&<Btn variant='outline' onClick={refreshSheet} sx={{fontSize:12}}>{sheetRefreshing?'Refreshing...':'⟳ Refresh Sheet'}</Btn>}
+      </div>
+      {isAdmin&&pendingReviews.length>0&&<div style={{marginBottom:28}}><SH color={C.yellow}>Pending Reviews</SH>{pendingReviews.map(a=>{const cl=clients.find(cc=>cc.id===a.clientId);const pm=getPM(a.pmId);return <Card key={a.id} hoverable onClick={()=>{setSelAnalysis(a);setView('adminReview')}} style={{padding:'14px 20px',marginBottom:8}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><span style={{fontWeight:600}}>{cl?.name}</span><span style={{color:C.muted,margin:'0 8px'}}>·</span><span style={{color:C.sub}}>{pm?.name}</span></div><Badge label='Needs Review' color={C.yellow} bg={C.yellowDim}/></div></Card>})}</div>}
+      {isPM&&awaiting.length>0&&<div style={{marginBottom:28}}><SH color={C.accent}>Ready for Analysis</SH>{awaiting.map(entry=>{const cl=clients.find(cc=>cc.id===entry.clientId);return <Card key={entry.id} hoverable onClick={()=>{setSelEntry(entry);setAiResult(null);setView('pmAnalysis')}} style={{padding:'14px 20px',marginBottom:8,borderColor:C.accentMed}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><span style={{fontWeight:600}}>{cl?.name}</span><span style={{color:C.muted,margin:'0 8px'}}>·</span><span style={{color:C.sub}}>{entry.period==='mon'?'Weekend':'EOW'}</span></div><Badge label='New' color={C.accent} bg={C.accentDim}/></div></Card>})}</div>}
+      <SH>{isAdmin?'All Clients':isPM?'Your Clients':'All Clients'}</SH>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
+        {myClients.map(client=>{
+          const{latest,latestAd}=getCD(client.id);const analysis=latest?getAn(latest.id):null;const scope=scopeData[client.id];const hasNew=latest&&!analysis&&isPM;
+          return <Card key={client.id} hoverable onClick={()=>{
+            if(isPM&&latest){setSelEntry(latest);setAiResult(analysis?{snapshot:analysis.snapshot,questions:analysis.questions}:null);setView('pmAnalysis')}
+            else if(isAdmin&&analysis){setSelAnalysis(analysis);setView('adminReview')}
+            else if(isAds)nav('adsUpload')
+          }} style={{borderColor:hasNew?C.accentMed:C.border,position:'relative'}}>
+            {hasNew&&<div style={{position:'absolute',top:12,right:12}}><Badge label='New' color={C.accent} bg={C.accentDim}/></div>}
+            <div style={{fontSize:16,fontWeight:600,marginBottom:2}}>{client.name}</div>
+            {client.industry&&<div style={{fontSize:11,color:C.muted,marginBottom:2}}>{client.industry}</div>}
+            {isAdmin&&<div style={{fontSize:11,color:C.sub,marginBottom:8}}>PM: {getPM(client.assigned_pm)?.name}</div>}
+            {scope&&<div style={{marginBottom:10,marginTop:6}}><ScopeBar current={scope.live_posts} goal={scope.scope_goal}/></div>}
+            {(latest||latestAd)?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginTop:6}}>{latest&&<><div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Views</div><div style={{fontSize:13,fontWeight:600,marginTop:2}}>{latest.totalViews?.toLocaleString()}</div></div><div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Eng.</div><div style={{fontSize:13,fontWeight:600,marginTop:2}}>{latest.engagementRate}%</div></div></>}{latestAd&&<div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>CPA</div><div style={{fontSize:13,fontWeight:600,marginTop:2}}>${latestAd.cpa}</div></div>}</div>:<div style={{fontSize:12,color:C.muted,fontStyle:'italic',marginTop:6}}>No data yet</div>}
+            {analysis&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}><div style={{width:7,height:7,borderRadius:'50%',background:analysis.status==='reviewed'?C.blue:C.green}}/><span style={{fontSize:11,color:C.sub}}>{analysis.status==='reviewed'?'Reviewed':'Submitted'}</span></div>}
+          </Card>
+        })}
+      </div>
+    </div>;
+  }
+
+  // SIDEBAR
+  const sidebarItems=isAdmin?[{id:'dashboard',label:'Dashboard',icon:'◉'},{id:'contentUpload',label:'Content Metrics',icon:'▶'},{id:'adsUpload',label:'Ad Metrics',icon:'◈'},{id:'topPerformers',label:'Top Performers',icon:'★'}]:isAds?[{id:'dashboard',label:'Dashboard',icon:'◉'},{id:'adsUpload',label:'Upload Ad Data',icon:'◈'}]:[{id:'dashboard',label:'My Clients',icon:'◉'}];
+
+  return <div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',fontSize:14}}>
+    <div style={{width:240,background:C.surface,borderRight:`1px solid ${C.border}`,height:'100vh',position:'fixed',left:0,top:0,display:'flex',flexDirection:'column',zIndex:10}}>
+      <div style={{padding:'20px 16px',borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:'0.14em',textTransform:'uppercase'}}>BW Club</div>
+        <div style={{fontSize:14,fontWeight:600,marginTop:3}}>PM Agency Portal</div>
+      </div>
+      <nav style={{padding:'12px 8px',flex:1}}>
+        {sidebarItems.map(item=><div key={item.id} onClick={()=>nav(item.id)} style={{padding:'9px 12px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,fontSize:13,fontWeight:view===item.id?600:400,color:view===item.id?C.text:C.sub,background:view===item.id?C.hover:'transparent',transition:'all 0.15s'}} onMouseEnter={e=>{if(view!==item.id)e.currentTarget.style.background=C.hover}} onMouseLeave={e=>{if(view!==item.id)e.currentTarget.style.background='transparent'}}>
+          <span style={{fontSize:12,width:16,textAlign:'center'}}>{item.icon}</span>{item.label}
+          {item.id==='dashboard'&&isPM&&awaiting.length>0&&<span style={{marginLeft:'auto',background:C.accent,color:C.bg,fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10}}>{awaiting.length}</span>}
+          {item.id==='dashboard'&&isAdmin&&pendingReviews.length>0&&<span style={{marginLeft:'auto',background:C.yellow,color:C.bg,fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10}}>{pendingReviews.length}</span>}
+        </div>)}
+      </nav>
+      <div style={{padding:'12px',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:32,height:32,borderRadius:'50%',background:isAdmin?C.accentDim:isAds?C.orangeDim:C.blueDim,color:isAdmin?C.accent:isAds?C.orange:C.blue,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>{user.avatar}</div>
+        <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{user.name}</div><div style={{fontSize:10,color:C.muted}}>{user.title}</div></div>
+        <Btn variant='ghost' onClick={()=>{setUser(null);nav('dashboard')}} sx={{padding:'4px 8px',fontSize:10}}>Switch</Btn>
+      </div>
+    </div>
+    <div style={{marginLeft:240,minHeight:'100vh',padding:'28px 36px'}}>
+      {view==='dashboard'&&<DashboardView/>}
+      {view==='contentUpload'&&isAdmin&&<ContentUploadView/>}
+      {view==='adsUpload'&&(isAdmin||isAds)&&<AdsUploadView/>}
+      {view==='topPerformers'&&isAdmin&&<TopPerfView/>}
+      {view==='pmAnalysis'&&isPM&&<PMAnalysisView/>}
+      {view==='adminReview'&&isAdmin&&<AdminReviewView/>}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
