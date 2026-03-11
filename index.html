@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>BW Club — PM Learning Portal</title>
+<title>BW Club — Command Center</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:#0B0C10;color:#ECEAE5}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 select option{background:#14151B;color:#ECEAE5}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0B0C10}::-webkit-scrollbar-thumb{background:#262733;border-radius:3px}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
 </style>
 </head>
 <body>
@@ -20,83 +23,144 @@ select option{background:#14151B;color:#ECEAE5}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 <script type="text/babel">
-const{useState,useEffect,useRef,useCallback}=React;
+const{useState,useEffect,useRef,useCallback,useMemo}=React;
 
 const SUPA_URL='https://ybkysfhsnpvqayhtaknx.supabase.co';
 const SUPA_KEY='sb_publishable_Hhntaf2L8SKdmIsVSySYWA_6gYKMEkG';
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-// ─── THEME ──────────────────────────────────────────────────────────────
+// ─── THEME ──────────────────────────────────────────────────────────
 const C={
   bg:'#0B0C10',surface:'#14151B',alt:'#1A1B23',hover:'#1E1F28',border:'#262733',
-  accent:'#C9A84C',accentDim:'#C9A84C25',accentGlow:'#C9A84C10',accentMed:'#C9A84C50',
+  accent:'#C9A84C',accentDim:'#C9A84C20',accentGlow:'#C9A84C10',accentMed:'#C9A84C50',
   text:'#ECEAE5',sub:'#908F9A',muted:'#5A596A',
-  green:'#4ADE80',greenDim:'#4ADE8018',red:'#F87171',redDim:'#F8717118',
-  yellow:'#FBBF24',yellowDim:'#FBBF2418',blue:'#60A5FA',blueDim:'#60A5FA18',
-  purple:'#A78BFA',purpleDim:'#A78BFA18',
+  green:'#4ADE80',greenDim:'#4ADE8015',greenSoft:'#4ADE8030',
+  red:'#F87171',redDim:'#F8717115',redSoft:'#F8717130',
+  yellow:'#FBBF24',yellowDim:'#FBBF2415',yellowSoft:'#FBBF2430',
+  blue:'#60A5FA',blueDim:'#60A5FA15',
+  purple:'#A78BFA',purpleDim:'#A78BFA15',
+  orange:'#FB923C',orangeDim:'#FB923C15',
 };
 const F={body:"'DM Sans',sans-serif",display:"'Playfair Display',serif"};
 
-// ─── UI ─────────────────────────────────────────────────────────────────
+// ─── UI ─────────────────────────────────────────────────────────────
 const Badge=({label,color,bg})=><span style={{display:'inline-flex',padding:'3px 10px',borderRadius:20,fontSize:10.5,fontWeight:650,color,background:bg,letterSpacing:'0.03em'}}>{label}</span>;
-
-const Card=({children,style:sx,glow,onClick,hoverable})=>{
+const Card=({children,style:sx,onClick,hoverable,health})=>{
   const[h,setH]=useState(false);
-  return<div onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{background:glow?C.accentGlow:C.surface,border:`1px solid ${glow?C.accentMed:h&&hoverable?C.accentMed:C.border}`,borderRadius:12,padding:24,cursor:onClick?'pointer':'default',transition:'all 0.2s',...sx}}>{children}</div>;
+  const bdr=health==='green'?C.greenSoft:health==='yellow'?C.yellowSoft:health==='red'?C.redSoft:h&&hoverable?C.accentMed:C.border;
+  return<div onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{background:C.surface,border:`1px solid ${bdr}`,borderRadius:12,padding:20,cursor:onClick?'pointer':'default',transition:'all 0.2s',animation:'fadeIn 0.3s ease',...sx}}>{children}</div>;
 };
-
-const Btn=({children,onClick,disabled,variant='primary',sx})=><button onClick={disabled?undefined:onClick} style={{border:variant==='outline'?`1px solid ${C.accent}40`:'none',background:variant==='primary'?C.accent:'transparent',color:variant==='primary'?C.bg:variant==='outline'?C.accent:C.sub,borderRadius:8,padding:variant==='ghost'?'8px 12px':'10px 20px',fontWeight:600,fontSize:13,cursor:disabled?'default':'pointer',fontFamily:F.body,opacity:disabled?0.35:1,transition:'all 0.15s',...sx}}>{children}</button>;
-
+const Btn=({children,onClick,disabled,variant='primary',sx})=><button onClick={disabled?undefined:onClick} style={{border:variant==='outline'?`1px solid ${C.accent}40`:variant==='danger'?`1px solid ${C.red}40`:'none',background:variant==='primary'?C.accent:variant==='danger'?'transparent':'transparent',color:variant==='primary'?C.bg:variant==='danger'?C.red:variant==='outline'?C.accent:C.sub,borderRadius:8,padding:variant==='ghost'?'8px 12px':'10px 20px',fontWeight:600,fontSize:13,cursor:disabled?'default':'pointer',fontFamily:F.body,opacity:disabled?0.35:1,transition:'all 0.15s',...sx}}>{children}</button>;
 const Label=({children})=><div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>{children}</div>;
-const SH=({children,color:cl})=><div style={{fontSize:10.5,fontWeight:700,color:cl||C.accent,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16}}>{children}</div>;
-const Txa=(props)=><textarea {...props} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 14px',color:C.text,fontSize:13,fontFamily:F.body,outline:'none',resize:'vertical',minHeight:90,boxSizing:'border-box',lineHeight:1.6,...props.style}}/>;
+const SH=({children,color:cl,right})=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}><div style={{fontSize:10.5,fontWeight:700,color:cl||C.accent,textTransform:'uppercase',letterSpacing:'0.08em'}}>{children}</div>{right}</div>;
 const Inp=(props)=><input {...props} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',color:C.text,fontSize:13,fontFamily:F.body,outline:'none',boxSizing:'border-box',...props.style}}/>;
+const Txa=(props)=><textarea {...props} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 14px',color:C.text,fontSize:13,fontFamily:F.body,outline:'none',resize:'vertical',minHeight:70,boxSizing:'border-box',lineHeight:1.6,...props.style}}/>;
 const Dv=()=><div style={{height:1,background:C.border,margin:'20px 0'}}/>;
-const Sel=({value,onChange,children})=><select value={value} onChange={onChange} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',color:C.text,fontSize:13,fontFamily:F.body,cursor:'pointer'}}>{children}</select>;
+const Sel=({value,onChange,children,style:sx})=><select value={value} onChange={onChange} style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',color:C.text,fontSize:13,fontFamily:F.body,cursor:'pointer',...sx}}>{children}</select>;
 
-function ScopeBar({current,goal}){
-  const pct=goal>0?Math.min(Math.max((current/goal)*100,0),150):0;const display=Math.min(pct,100);
-  const color=pct>=90?C.green:pct>=60?C.yellow:C.red;const over=pct>100;
-  return<div><div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.sub,marginBottom:4}}><span>{current}/{goal} videos</span><span style={{color:over?C.green:color,fontWeight:600}}>{over?`${pct.toFixed(0)}% ✓`:`${pct.toFixed(0)}%`}</span></div><div style={{height:6,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${display}%`,background:color,borderRadius:3,transition:'width 0.4s ease'}}/></div></div>;
+function Trend({current,previous,format,invert}){
+  if(previous==null||previous===0)return<span style={{color:C.muted,fontSize:11}}>—</span>;
+  const pctChange=((current-previous)/previous)*100;
+  const up=pctChange>0;const flat=Math.abs(pctChange)<2;
+  const color=flat?C.muted:(invert?!up:up)?C.green:C.red;
+  const arrow=flat?'→':up?'↑':'↓';
+  const fmt=format==='$'?`$${current.toFixed(2)}`:format==='%'?`${current}%`:current>=1000000?(current/1000000).toFixed(1)+'M':current>=1000?(current/1000).toFixed(1)+'K':current.toLocaleString();
+  return<div><span style={{fontSize:18,fontWeight:700,letterSpacing:'-0.02em'}}>{fmt}</span><span style={{fontSize:12,fontWeight:600,color,marginLeft:6}}>{arrow} {Math.abs(pctChange).toFixed(0)}%</span></div>;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+function HealthDot({status,size=10}){
+  const color=status==='green'?C.green:status==='yellow'?C.yellow:status==='red'?C.red:C.muted;
+  return<div style={{width:size,height:size,borderRadius:'50%',background:color,boxShadow:`0 0 ${size}px ${color}40`,flexShrink:0}}/>;
+}
+
+// ─── HEALTH CALC ────────────────────────────────────────────────────
+function calcHealth(client,checkins,creatorCheckins,creators){
+  const clientCheckins=checkins.filter(c=>c.client_id===client.id).sort((a,b)=>new Date(b.checkin_date)-new Date(a.checkin_date));
+  const clientCreators=creators.filter(c=>c.client_id===client.id&&c.status==='active');
+  
+  // No data at all
+  if(clientCheckins.length===0)return{status:'grey',reason:'No data yet',score:0};
+  
+  const latest=clientCheckins[0];const prev=clientCheckins[1];
+  const now=new Date();const lastDate=new Date(latest.checkin_date);
+  const daysSince=Math.floor((now-lastDate)/(1000*60*60*24));
+  
+  let issues=[];let score=100;
+  
+  // Freshness
+  if(daysSince>4){issues.push('No check-in in '+daysSince+' days');score-=40}
+  else if(daysSince>2){issues.push('Check-in '+daysSince+'d ago');score-=15}
+  
+  // View trend
+  if(prev){
+    const viewChange=prev.views_48h>0?((latest.views_48h-prev.views_48h)/prev.views_48h)*100:-100;
+    if(viewChange<-30){issues.push('Views dropped '+Math.abs(viewChange).toFixed(0)+'%');score-=30}
+    else if(viewChange<-15){issues.push('Views dipped');score-=15}
+    else if(viewChange>15)score+=5;
+    
+    const likeChange=prev.likes_48h>0?((latest.likes_48h-prev.likes_48h)/prev.likes_48h)*100:-100;
+    if(likeChange<-30){issues.push('Likes dropped');score-=20}
+    else if(likeChange<-15)score-=10;
+  }
+  
+  // Creator health
+  if(clientCreators.length>0){
+    const latestCreatorCheckins=clientCreators.map(cr=>{
+      const cc=creatorCheckins.filter(c=>c.creator_id===cr.id).sort((a,b)=>new Date(b.checkin_date)-new Date(a.checkin_date));
+      return{creator:cr,latest:cc[0],prev:cc[1]};
+    });
+    const noData=latestCreatorCheckins.filter(c=>!c.latest).length;
+    if(noData>0){issues.push(noData+' creator'+(noData>1?'s':'')+' unchecked');score-=10*noData}
+    
+    latestCreatorCheckins.forEach(({creator,latest:cl,prev:cp})=>{
+      if(cl&&cp&&cp.follower_count>0){
+        const fChange=((cl.follower_count-cp.follower_count)/cp.follower_count)*100;
+        if(fChange<-5){issues.push(creator.name+' lost followers');score-=15}
+      }
+    });
+  }
+  
+  score=Math.max(0,Math.min(100,score));
+  const status=score>=70?'green':score>=40?'yellow':'red';
+  return{status,reason:issues.length>0?issues[0]:'Looking good',issues,score,latest,prev,daysSince};
+}
+
+// ═══════════════════════════════════════════════════════════════════
 function App(){
   const[user,setUser]=useState(null);
   const[users,setUsers]=useState([]);
   const[clients,setClients]=useState([]);
+  const[creators,setCreators]=useState([]);
+  const[clientCheckins,setCC]=useState([]);
+  const[creatorCheckins,setCrC]=useState([]);
   const[scopeData,setScopeData]=useState({});
-  const[reviews,setReviews]=useState([]);
-  const[learnings,setLearnings]=useState([]);
   const[view,setView]=useState('dashboard');
-  const[selReview,setSelReview]=useState(null);
-  const[selClientFilter,setSelClientFilter]=useState(null);
-  const[aiLoading,setAiLoading]=useState(false);
-  const[aiResult,setAiResult]=useState(null);
+  const[selClient,setSelClient]=useState(null);
   const[loading,setLoading]=useState(true);
-  const[sheetRefreshing,setSheetRefreshing]=useState(false);
+  const[saving,setSaving]=useState(false);
+  const[sheetRefreshing,setSR]=useState(false);
 
-  // ─── Load ──────────────────────────────────────────────────────────
   const loadData=useCallback(async()=>{
     setLoading(true);
     try{
-      const[uR,cR,sR,rR,lR]=await Promise.all([
+      const[uR,cR,crR,ccR,crcR,sR]=await Promise.all([
         sb.from('users').select('*'),
         sb.from('clients').select('*'),
+        sb.from('creators').select('*').order('created_at',{ascending:true}),
+        sb.from('client_checkins').select('*').order('checkin_date',{ascending:false}),
+        sb.from('creator_checkins').select('*').order('checkin_date',{ascending:false}),
         sb.from('scope_data').select('*').order('refreshed_at',{ascending:false}),
-        sb.from('reviews').select('*').order('created_at',{ascending:false}),
-        sb.from('learnings').select('*').order('created_at',{ascending:false}),
       ]);
       if(uR.data){
         const allowed=uR.data.filter(u=>['admin2','pm1','pm2','pm3','pm4'].includes(u.id));
-        // Override admin display to generic "Admin"
         setUsers(allowed.map(u=>u.role==='admin'?{...u,name:'Admin',avatar:'★',title:'Leadership'}:u));
       }
       if(cR.data)setClients(cR.data);
+      if(crR.data)setCreators(crR.data);
+      if(ccR.data)setCC(ccR.data);
+      if(crcR.data)setCrC(crcR.data);
       if(sR.data){const m={};sR.data.forEach(r=>{if(!m[r.client_id])m[r.client_id]=r});setScopeData(m)}
-      if(rR.data)setReviews(rR.data);
-      if(lR.data)setLearnings(lR.data);
-    }catch(e){console.error('Load:',e)}
+    }catch(e){console.error(e)}
     setLoading(false);
   },[]);
   useEffect(()=>{loadData()},[loadData]);
@@ -104,103 +168,29 @@ function App(){
   const isAdmin=user?.role==='admin';
   const isPM=user?.role==='pm';
   const myClients=isAdmin?clients:clients.filter(cl=>cl.assigned_pm===user?.id);
-  const getPM=(pid)=>users.find(u=>u.id===pid);
-  const nav=(v)=>{setView(v);setSelReview(null);setSelClientFilter(null);setAiResult(null)};
+  const getPM=pid=>users.find(u=>u.id===pid);
+  const nav=v=>{setView(v);setSelClient(null)};
+  const today=new Date().toISOString().split('T')[0];
 
-  const pendingForPM=isPM?reviews.filter(r=>{
-    const cl=clients.find(c=>c.id===r.client_id);
-    return cl?.assigned_pm===user?.id&&!learnings.find(l=>l.review_id===r.id&&l.pm_id===user?.id);
-  }):[];
-
-  // ─── Claude ───────────────────────────────────────────────────────
-  async function callClaude(messages){
-    try{
-      const res=await fetch('/.netlify/functions/claude-api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,max_tokens:1500})});
-      return await res.json();
-    }catch(e){console.error('Claude:',e);return null}
-  }
-
-  async function extractScreenshot(file){
-    const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej();r.readAsDataURL(file)});
-    const data=await callClaude([{role:'user',content:[
-      {type:'image',source:{type:'base64',media_type:file.type||'image/png',data:base64}},
-      {type:'text',text:'Look at this dashboard or content screenshot. Extract ALL visible metrics, numbers, and performance data. Include video counts, views, engagement rates, likes, comments, shares, or whatever is visible. Be specific with numbers. If it shows top performing content, describe what you see about each piece including any visible metrics, thumbnails, or captions.'}
-    ]}]);
-    return data?.content?.map(i=>i.text||'').join('')||'Could not read — enter details manually below';
-  }
-
-  async function generatePrompts(review,scope){
-    setAiLoading(true);setAiResult(null);
-    try{
-      const client=clients.find(c=>c.id===review.client_id);
-      const prompt=`You are a senior TikTok UGC content strategist coaching Project Managers at BW Club, a UGC marketing agency working with Fortune 500 companies and top apps.
-
-Your job is to make the PM THINK deeply about what's working and how to replicate it. Don't let them get away with surface-level answers. Push them to identify formulas, patterns, and actionable creative strategies.
-
-CLIENT: ${client?.name||'Unknown'} | ${client?.industry||''}
-
-${scope?`SCOPE: ${scope.live_posts}/${scope.scope_goal} videos (${scope.videos_left>0?scope.videos_left+' left':Math.abs(scope.videos_left)+' OVER scope'}) | Period: ${scope.scope_start} → ${scope.scope_end}
-${scope.scope_notes?'Notes: '+scope.scope_notes:''}
-${scope.standup_notes?'Standup: '+scope.standup_notes:''}`:''} 
-
-OVERALL PERFORMANCE DATA:
-${review.growi_summary||'No performance data available'}
-
-TOP PERFORMING CONTENT:
-${review.top_performers_summary||'No top performer data'}
-
-WHY THIS IS WORKING (Admin context):
-${review.admin_context||'No context provided'}
-
-Generate exactly 5 learning prompts. They should:
-1. Force the PM to identify specifically WHY certain content outperformed — not just that it did
-2. Break down the FORMULA: what hook type, video structure, pacing, and CTA drove results
-3. Push them to come up with 3+ new content ideas that apply the same winning formula  
-4. Connect creative patterns to actual numbers — "this format got X views because..."
-5. Challenge them to identify what's NOT working and propose what to kill or change
-
-Write like a mentor who's invested in their growth, not a corporate questionnaire.
-
-Also write a 2-3 sentence snapshot summarizing where this client stands right now.
-
-Return ONLY JSON: {"snapshot":"...","prompts":["...","...","...","...","..."]}`;
-
-      const data=await callClaude([{role:'user',content:prompt}]);
-      const txt=data?.content?.map(i=>i.text||'').join('')||'';
-      setAiResult(JSON.parse(txt.replace(/```json|```/g,'').trim()));
-    }catch(e){
-      console.error('Prompts:',e);
-      setAiResult({
-        snapshot:'New review data is ready. Study the performance metrics and top performers below, then work through the prompts.',
-        prompts:[
-          'Look at the top performing content — what specific hook style, format, or structure do they share? Break down the formula you see.',
-          'If you had to create 5 new videos tomorrow using ONLY what worked this period, what would they be? Be specific about hooks, formats, and CTAs.',
-          'Which content underperformed and why? What would you change or kill entirely?',
-          'Compare the engagement rates across different content types — what does this tell you about what the audience actually wants vs what we think they want?',
-          'What\'s one creative risk you\'d take next period based on what you\'re seeing in the data? Why?'
-        ]
-      });
-    }
-    setAiLoading(false);
-  }
+  // Check if PM already submitted today for a client
+  const hasCheckedIn=(clientId)=>clientCheckins.some(c=>c.client_id===clientId&&c.checkin_date===today&&c.pm_id===user?.id);
 
   async function refreshSheet(){
-    setSheetRefreshing(true);
+    setSR(true);
     try{const res=await fetch('/.netlify/functions/refresh-sheet');const data=await res.json();
-      if(data.success&&data.data){const m={};data.data.forEach(r=>{m[r.client_id]=r});setScopeData(m)}
-    }catch(e){console.error('Sheet:',e)}
-    setSheetRefreshing(false);
+      if(data.success&&data.data){const m={};data.data.forEach(r=>{m[r.client_id]=r});setScopeData(m)}}catch(e){}
+    setSR(false);
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  if(loading)return<div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{textAlign:'center'}}><div style={{fontSize:20,animation:'spin 1s linear infinite',marginBottom:12}}>⟳</div><div style={{color:C.sub}}>Loading...</div></div></div>;
+  if(loading)return<div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{textAlign:'center'}}><div style={{fontSize:20,animation:'spin 1s linear infinite',marginBottom:12}}>⟳</div><div style={{color:C.sub}}>Loading Command Center...</div></div></div>;
 
-  // ─── LOGIN ────────────────────────────────────────────────────────
+  // LOGIN
   if(!user)return(
     <div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:48}}>
       <div style={{textAlign:'center'}}>
         <div style={{fontSize:12,fontWeight:700,color:C.accent,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:14}}>BW Club</div>
-        <h1 style={{fontFamily:F.display,fontSize:38,fontWeight:600,margin:0}}>PM Learning Portal</h1>
+        <h1 style={{fontFamily:F.display,fontSize:38,fontWeight:600,margin:0}}>Command Center</h1>
         <p style={{color:C.sub,marginTop:10}}>Select your profile</p>
       </div>
       <div style={{display:'flex',gap:14,flexWrap:'wrap',justifyContent:'center',maxWidth:600}}>
@@ -214,290 +204,259 @@ Return ONLY JSON: {"snapshot":"...","prompts":["...","...","...","...","..."]}`;
   );
 
   // ═══════════════════════════════════════════════════════════════════
-  // ADMIN: UPLOAD REVIEW
+  // PM CHECK-IN FORM
   // ═══════════════════════════════════════════════════════════════════
-  function AdminUploadView(){
-    const[clientId,setClientId]=useState('');
-    const[growiFile,setGrowiFile]=useState(null);const[growiPrev,setGrowiPrev]=useState(null);const[growiSum,setGrowiSum]=useState('');
-    const[topFiles,setTopFiles]=useState([]);const[topPrevs,setTopPrevs]=useState([]);const[topSum,setTopSum]=useState('');
-    const[topLinks,setTopLinks]=useState(['']);
-    const[adminCtx,setAdminCtx]=useState('');
-    const[step,setStep]=useState('');
-    const[submitted,setSubmitted]=useState(false);
-
-    const addTop=(f)=>{setTopFiles(p=>[...p,f]);setTopPrevs(p=>[...p,URL.createObjectURL(f)])};
-    const removeTop=(i)=>{setTopFiles(p=>p.filter((_,j)=>j!==i));setTopPrevs(p=>p.filter((_,j)=>j!==i))};
-    const addLink=()=>setTopLinks(p=>[...p,'']);
-    const setLink=(i,v)=>{const n=[...topLinks];n[i]=v;setTopLinks(n)};
-    const removeLink=(i)=>setTopLinks(p=>p.filter((_,j)=>j!==i));
-
-    const extractAll=async()=>{
-      let gs='',ts='';
-      if(growiFile){setStep('Reading Growi dashboard...');gs=await extractScreenshot(growiFile);setGrowiSum(gs)}
-      if(topFiles.length>0){
-        const parts=[];
-        for(let i=0;i<topFiles.length;i++){setStep(`Reading top performer ${i+1} of ${topFiles.length}...`);parts.push(`Top Performer ${i+1}:\n${await extractScreenshot(topFiles[i])}`);}
-        ts=parts.join('\n\n');setTopSum(ts);
-      }
-      setStep('done');
-    };
-
-    const submit=async()=>{
-      if(!clientId)return;
-      const id=`rev_${Date.now()}`;
-      const row={id,client_id:clientId,growi_summary:growiSum,top_performers_summary:topSum,top_links:topLinks.filter(l=>l.trim()),admin_context:adminCtx,submitted_by:user.id,created_at:new Date().toISOString()};
-      await sb.from('reviews').insert(row);
-      setReviews(p=>[row,...p]);
-      setSubmitted(true);
-    };
-
-    if(submitted)return<div style={{maxWidth:500,margin:'100px auto',textAlign:'center'}}>
-      <div style={{width:64,height:64,borderRadius:'50%',background:C.greenDim,color:C.green,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 20px'}}>✓</div>
-      <h2 style={{fontFamily:F.display,fontSize:24,fontWeight:600,marginBottom:8}}>Review Published</h2>
-      <p style={{color:C.sub,marginBottom:28,lineHeight:1.6}}>Your PMs will see this on their dashboard with AI-generated learning prompts tailored to the data you uploaded.</p>
-      <div style={{display:'flex',gap:10,justifyContent:'center'}}>
-        <Btn onClick={()=>{setSubmitted(false);setClientId('');setGrowiFile(null);setGrowiPrev(null);setGrowiSum('');setTopFiles([]);setTopPrevs([]);setTopSum('');setTopLinks(['']);setAdminCtx('');setStep('')}}>Upload Another</Btn>
-        <Btn variant='outline' onClick={()=>nav('dashboard')}>Dashboard</Btn>
-      </div>
-    </div>;
-
-    return<div style={{maxWidth:780}}>
-      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
-      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>Upload Client Review</h1>
-      <p style={{color:C.sub,marginBottom:28}}>Drop screenshots + share your insights → PMs get tailored learning prompts</p>
-
-      <Card>
-        {/* CLIENT SELECT */}
-        <Label>Client</Label>
-        <Sel value={clientId} onChange={e=>setClientId(e.target.value)}><option value=''>Select client...</option>{clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}</Sel>
-        {clientId&&scopeData[clientId]&&<div style={{marginTop:14}}><ScopeBar current={scopeData[clientId].live_posts} goal={scopeData[clientId].scope_goal}/></div>}
-
-        <Dv/>
-
-        {/* GROWI */}
-        <Label>Growi Performance Screenshot</Label>
-        <div onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=e=>{const f=e.target.files[0];if(f){setGrowiFile(f);setGrowiPrev(URL.createObjectURL(f))}};i.click()}} style={{background:C.bg,border:`2px dashed ${C.border}`,borderRadius:10,padding:growiPrev?'12px':'32px 20px',textAlign:'center',cursor:'pointer',transition:'border-color 0.2s'}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-          {growiPrev?<img src={growiPrev} style={{maxWidth:'100%',maxHeight:220,borderRadius:8}}/>:<div style={{color:C.muted}}>Click to upload Growi dashboard screenshot</div>}
-        </div>
-
-        <Dv/>
-
-        {/* TOP PERFORMERS */}
-        <Label>Top Performer Screenshots</Label>
-        <p style={{fontSize:12,color:C.muted,marginBottom:10}}>Upload screenshots of the winning videos — the PMs will study these</p>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
-          {topPrevs.map((p,i)=><div key={i} style={{position:'relative',borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
-            <img src={p} style={{width:'100%',height:130,objectFit:'cover'}}/>
-            <div onClick={(e)=>{e.stopPropagation();removeTop(i)}} style={{position:'absolute',top:6,right:6,width:22,height:22,borderRadius:'50%',background:'rgba(0,0,0,0.7)',color:C.red,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:12,fontWeight:700}}>×</div>
-          </div>)}
-          <div onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='image/*';i.multiple=true;i.onchange=e=>{Array.from(e.target.files).forEach(f=>addTop(f))};i.click()}} style={{background:C.bg,border:`2px dashed ${C.border}`,borderRadius:8,minHeight:130,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:C.muted,fontSize:13,flexDirection:'column',gap:4}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.green} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-            <span style={{fontSize:20}}>+</span>
-            <span>Add screenshots</span>
-          </div>
-        </div>
-
-        {/* LINKS */}
-        <div style={{marginTop:16}}>
-          <Label>TikTok Links for Top Performers</Label>
-          {topLinks.map((l,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
-            <Inp value={l} onChange={e=>setLink(i,e.target.value)} placeholder={`https://tiktok.com/... (video ${i+1})`}/>
-            {topLinks.length>1&&<div onClick={()=>removeLink(i)} style={{color:C.red,cursor:'pointer',fontSize:16,padding:'0 4px'}}>×</div>}
-          </div>)}
-          <Btn variant='ghost' onClick={addLink} sx={{fontSize:12,padding:'4px 10px',marginTop:2}}>+ Add link</Btn>
-        </div>
-
-        <Dv/>
-
-        {/* ADMIN CONTEXT */}
-        <Label>Why is this content winning?</Label>
-        <p style={{fontSize:12,color:C.muted,marginBottom:8}}>Your analysis shapes the AI prompts. Talk about hooks, formats, CTAs, pacing — what's the formula?</p>
-        <Txa value={adminCtx} onChange={e=>setAdminCtx(e.target.value)} placeholder="Example: The POV-style hooks are crushing it — anything that starts with 'I tried...' or 'Nobody talks about...' is getting 3-5x the views. The 15-second format with a hard CTA at the end converts way better than the longer storytelling format we tested." style={{minHeight:120}}/>
-
-        <Dv/>
-
-        {/* EXTRACT + SUBMIT */}
-        {step===''&&(growiFile||topFiles.length>0)&&<div style={{textAlign:'center',marginBottom:16}}>
-          <Btn onClick={extractAll} sx={{padding:'12px 32px',fontSize:14}}>📷 Read Screenshots with Claude</Btn>
-          <div style={{fontSize:11,color:C.muted,marginTop:6}}>Claude will extract all the data from your screenshots</div>
-        </div>}
-
-        {step&&step!=='done'&&<div style={{textAlign:'center',padding:'24px 0'}}><div style={{color:C.sub}}><span style={{display:'inline-block',animation:'spin 1s linear infinite',marginRight:8,fontSize:16}}>⟳</span>{step}</div></div>}
-
-        {step==='done'&&<>
-          {growiSum&&<Card style={{marginBottom:12,padding:'14px 18px'}}><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><span style={{color:C.green}}>✓</span><span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase'}}>Growi Data Extracted</span></div><p style={{fontSize:13,color:C.sub,lineHeight:1.7,margin:0,whiteSpace:'pre-wrap'}}>{growiSum}</p></Card>}
-          {topSum&&<Card style={{marginBottom:12,padding:'14px 18px'}}><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><span style={{color:C.green}}>✓</span><span style={{fontSize:10,fontWeight:700,color:C.green,textTransform:'uppercase'}}>Top Performers Extracted</span></div><p style={{fontSize:13,color:C.sub,lineHeight:1.7,margin:0,whiteSpace:'pre-wrap'}}>{topSum}</p></Card>}
-        </>}
-
-        {(step==='done'||(!growiFile&&topFiles.length===0))&&<div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:16}}>
-          <Btn variant='outline' onClick={()=>nav('dashboard')}>Cancel</Btn>
-          <Btn disabled={!clientId||(!growiSum&&!adminCtx)} onClick={submit} sx={{padding:'12px 32px'}}>Publish Review for PMs</Btn>
-        </div>}
-      </Card>
-    </div>;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // PM: LEARNING REVIEW
-  // ═══════════════════════════════════════════════════════════════════
-  function PMLearningView(){
-    const review=selReview;
-    const client=clients.find(c=>c.id===review?.client_id);
-    const scope=scopeData[client?.id];
-    const existing=learnings.find(l=>l.review_id===review?.id&&l.pm_id===user?.id);
-    const[answers,setAnswers]=useState(['','','','','']);
-    const[takeaway,setTakeaway]=useState('');
+  function CheckinView(){
+    const client=selClient;
+    const clientCreators=creators.filter(c=>c.client_id===client?.id&&c.status==='active');
+    const alreadyDone=hasCheckedIn(client?.id);
+    const[views,setViews]=useState('');
+    const[likes,setLikes]=useState('');
+    const[topUrl,setTopUrl]=useState('');
+    const[topNotes,setTopNotes]=useState('');
+    const[crData,setCrData]=useState(()=>{
+      const m={};clientCreators.forEach(cr=>{m[cr.id]={followers:'',views:'',likes:''}});return m;
+    });
+    const[done,setDone]=useState(false);
 
     useEffect(()=>{
-      if(review&&!existing&&!aiResult)generatePrompts(review,scope);
-      if(existing){
-        setAnswers(existing.answers||['','','','','']);
-        setTakeaway(existing.key_takeaway||'');
-        if(!aiResult)setAiResult({snapshot:existing.snapshot,prompts:existing.prompts});
-      }
-    },[review?.id]);
+      const m={};clientCreators.forEach(cr=>{m[cr.id]={followers:'',views:'',likes:''}});setCrData(m);
+    },[client?.id]);
 
-    if(!review||!client)return null;
-    const prompts=aiResult?.prompts||existing?.prompts||[];
-    const snapshot=aiResult?.snapshot||existing?.snapshot||'';
-    const allDone=prompts.length>0&&answers.slice(0,prompts.length).every(a=>a.trim())&&takeaway.trim();
+    const setCr=(id,key,val)=>setCrData(p=>({...p,[id]:{...p[id],[key]:val}}));
 
     const submit=async()=>{
-      const id=`learn_${Date.now()}`;
-      const row={id,review_id:review.id,client_id:client.id,pm_id:user.id,snapshot,prompts,answers:answers.slice(0,prompts.length),key_takeaway:takeaway,status:'submitted',created_at:new Date().toISOString()};
-      await sb.from('learnings').insert(row);
-      setLearnings(p=>[row,...p]);
-      nav('dashboard');
+      if(!client)return;
+      setSaving(true);
+      // Client checkin
+      const ccId=`cc_${Date.now()}`;
+      const ccRow={id:ccId,client_id:client.id,pm_id:user.id,views_48h:parseInt(views)||0,likes_48h:parseInt(likes)||0,top_video_url:topUrl,top_video_notes:topNotes,checkin_date:today};
+      await sb.from('client_checkins').insert(ccRow);
+      setCC(p=>[ccRow,...p]);
+
+      // Creator checkins
+      for(const cr of clientCreators){
+        const d=crData[cr.id];
+        if(d&&(d.followers||d.views||d.likes)){
+          const crId=`crc_${Date.now()}_${cr.id}`;
+          const crRow={id:crId,creator_id:cr.id,client_id:client.id,pm_id:user.id,follower_count:parseInt(d.followers)||0,views:parseInt(d.views)||0,likes:parseInt(d.likes)||0,checkin_date:today};
+          await sb.from('creator_checkins').insert(crRow);
+          setCrC(p=>[crRow,...p]);
+        }
+      }
+      setSaving(false);setDone(true);
     };
 
-    return<div style={{maxWidth:820}}>
+    if(!client)return null;
+
+    if(done||alreadyDone)return<div style={{maxWidth:500,margin:'80px auto',textAlign:'center'}}>
+      <div style={{width:64,height:64,borderRadius:'50%',background:C.greenDim,color:C.green,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 20px'}}>✓</div>
+      <h2 style={{fontFamily:F.display,fontSize:24,fontWeight:600,marginBottom:8}}>{client.name} — Checked In</h2>
+      <p style={{color:C.sub,marginBottom:24}}>{alreadyDone&&!done?'Already submitted today.':'Data saved.'}</p>
+      <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+        <Btn onClick={()=>nav('dashboard')}>Dashboard</Btn>
+        <Btn variant='outline' onClick={()=>{const idx=myClients.findIndex(c=>c.id===client.id);const next=myClients[idx+1];if(next){setSelClient(next);setDone(false);setViews('');setLikes('');setTopUrl('');setTopNotes('')}else nav('dashboard')}}>Next Client →</Btn>
+      </div>
+    </div>;
+
+    return<div style={{maxWidth:720}}>
+      <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
+      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>{client.name} — Check-In</h1>
+      <p style={{color:C.sub,marginBottom:24}}>48-hour performance snapshot · {new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</p>
+
+      <Card style={{marginBottom:16}}>
+        <SH>Client Performance — Last 48 Hours</SH>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <div><Label>Total Views (48h)</Label><Inp type='number' value={views} onChange={e=>setViews(e.target.value)} placeholder='e.g. 125000'/></div>
+          <div><Label>Total Likes (48h)</Label><Inp type='number' value={likes} onChange={e=>setLikes(e.target.value)} placeholder='e.g. 8500'/></div>
+        </div>
+        <Dv/>
+        <SH color={C.green}>Top Performing Video</SH>
+        <div><Label>TikTok Link</Label><Inp value={topUrl} onChange={e=>setTopUrl(e.target.value)} placeholder='https://tiktok.com/...'/></div>
+        <div style={{marginTop:12}}><Label>Why is this one winning?</Label><Txa value={topNotes} onChange={e=>setTopNotes(e.target.value)} placeholder='Hook style, format, pacing, CTA — what made it pop?'/></div>
+      </Card>
+
+      {clientCreators.length>0&&<Card style={{marginBottom:16}}>
+        <SH color={C.purple}>Creator Health Check</SH>
+        <p style={{fontSize:12,color:C.muted,marginBottom:16}}>Quick numbers per creator — follower count + recent performance</p>
+        {clientCreators.map((cr,i)=><div key={cr.id}>
+          {i>0&&<div style={{height:1,background:C.border,margin:'16px 0'}}/>}
+          <div style={{fontSize:14,fontWeight:600,marginBottom:10}}>{cr.name}<span style={{color:C.muted,fontWeight:400,marginLeft:8,fontSize:12}}>@{cr.tiktok_handle||'—'}</span></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+            <div><Label>Followers</Label><Inp type='number' value={crData[cr.id]?.followers||''} onChange={e=>setCr(cr.id,'followers',e.target.value)} placeholder='0'/></div>
+            <div><Label>Views (48h)</Label><Inp type='number' value={crData[cr.id]?.views||''} onChange={e=>setCr(cr.id,'views',e.target.value)} placeholder='0'/></div>
+            <div><Label>Likes (48h)</Label><Inp type='number' value={crData[cr.id]?.likes||''} onChange={e=>setCr(cr.id,'likes',e.target.value)} placeholder='0'/></div>
+          </div>
+        </div>)}
+      </Card>}
+
+      {clientCreators.length===0&&<Card style={{marginBottom:16,textAlign:'center',padding:32}}><div style={{color:C.muted}}>No creators assigned to this client yet.{isAdmin?' Add them in Manage Creators.':' Ask Admin to add them.'}</div></Card>}
+
+      <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+        <Btn variant='outline' onClick={()=>nav('dashboard')}>Cancel</Btn>
+        <Btn disabled={!views&&!likes} onClick={submit} sx={{padding:'12px 32px'}}>{saving?'Saving...':'Submit Check-In'}</Btn>
+      </div>
+    </div>;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CLIENT DETAIL
+  // ═══════════════════════════════════════════════════════════════════
+  function ClientDetailView(){
+    const client=selClient;if(!client)return null;
+    const scope=scopeData[client.id];
+    const health=calcHealth(client,clientCheckins,creatorCheckins,creators);
+    const cCheckins=clientCheckins.filter(c=>c.client_id===client.id).sort((a,b)=>new Date(b.checkin_date)-new Date(a.checkin_date));
+    const clientCreators=creators.filter(c=>c.client_id===client.id&&c.status==='active');
+    const pm=getPM(client.assigned_pm);
+
+    return<div style={{maxWidth:860}}>
       <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
       <div style={{display:'flex',alignItems:'center',gap:14,margin:'20px 0 4px'}}>
+        <HealthDot status={health.status} size={14}/>
         <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>{client.name}</h1>
-        {existing&&<Badge label='Completed' color={C.green} bg={C.greenDim}/>}
+        {client.industry&&<span style={{fontSize:12,color:C.muted}}>{client.industry}</span>}
       </div>
-      <p style={{color:C.muted,fontSize:12,marginBottom:28}}>{new Date(review.created_at).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'})}</p>
+      <p style={{color:C.sub,fontSize:13,marginBottom:24}}>PM: {pm?.name||'Unassigned'} · {health.reason}</p>
 
-      {/* SCOPE */}
+      {/* Scope bar */}
       {scope&&<Card style={{marginBottom:14,padding:'16px 20px'}}>
-        <SH color={C.yellow}>Scope Status</SH>
-        <ScopeBar current={scope.live_posts} goal={scope.scope_goal}/>
-        <div style={{display:'flex',gap:20,marginTop:10,fontSize:12,color:C.sub}}>
-          <span>{scope.videos_left>0?`${scope.videos_left} remaining`:`${Math.abs(scope.videos_left)} over scope`}</span>
-          <span>·</span>
-          <span>{scope.scope_start} → {scope.scope_end}</span>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.yellow,textTransform:'uppercase',letterSpacing:'0.07em'}}>Scope</span>
+          <span style={{fontSize:12,color:C.sub}}>{scope.scope_start} → {scope.scope_end}</span>
         </div>
-        {scope.scope_notes&&<div style={{marginTop:8,fontSize:12,color:C.sub}}><span style={{color:C.yellow,fontWeight:600}}>Notes: </span>{scope.scope_notes}</div>}
-        {scope.standup_notes&&<div style={{marginTop:4,fontSize:12,color:C.sub}}><span style={{color:C.yellow,fontWeight:600}}>Standup: </span>{scope.standup_notes}</div>}
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{flex:1,height:8,background:C.border,borderRadius:4,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.min((scope.live_posts/scope.scope_goal)*100,100)}%`,background:scope.live_posts>=scope.scope_goal?C.green:scope.live_posts>=scope.scope_goal*0.6?C.yellow:C.red,borderRadius:4}}/></div>
+          <span style={{fontSize:13,fontWeight:600,minWidth:70,textAlign:'right'}}>{scope.live_posts}/{scope.scope_goal}</span>
+        </div>
       </Card>}
 
-      {/* PERFORMANCE DATA */}
-      {review.growi_summary&&<Card style={{marginBottom:14}}>
-        <SH>Overall Performance</SH>
-        <p style={{fontSize:13,lineHeight:1.7,color:C.sub,whiteSpace:'pre-wrap',margin:0}}>{review.growi_summary}</p>
-      </Card>}
-
-      {/* TOP PERFORMERS */}
-      {(review.top_performers_summary||review.top_links?.length>0)&&<Card style={{marginBottom:14}}>
-        <SH color={C.green}>Top Performers — Study These Closely</SH>
-        {review.top_performers_summary&&<p style={{fontSize:13,lineHeight:1.7,color:C.sub,whiteSpace:'pre-wrap',margin:0,marginBottom:review.top_links?.length>0?14:0}}>{review.top_performers_summary}</p>}
-        {review.top_links?.length>0&&<div style={{display:'flex',flexDirection:'column',gap:6}}>
-          {review.top_links.map((l,i)=>l&&<a key={i} href={l} target='_blank' rel='noreferrer' style={{display:'inline-flex',alignItems:'center',gap:6,color:C.accent,textDecoration:'none',fontSize:13,padding:'6px 12px',background:C.accentGlow,borderRadius:6,border:`1px solid ${C.accentMed}`,width:'fit-content'}}>🔗 Watch Video {i+1}</a>)}
+      {/* Latest metrics */}
+      {cCheckins.length>0&&<Card style={{marginBottom:14}}>
+        <SH>Latest Check-In<span style={{fontWeight:400,color:C.muted,fontSize:11,marginLeft:10}}>{new Date(cCheckins[0].checkin_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></SH>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+          <div><Label>Views (48h)</Label><Trend current={cCheckins[0].views_48h} previous={cCheckins[1]?.views_48h}/></div>
+          <div><Label>Likes (48h)</Label><Trend current={cCheckins[0].likes_48h} previous={cCheckins[1]?.likes_48h}/></div>
+        </div>
+        {cCheckins[0].top_video_url&&<div style={{marginTop:16,padding:'12px 16px',background:C.alt,borderRadius:8,borderLeft:`3px solid ${C.green}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:'uppercase',marginBottom:4}}>Top Video</div>
+          <a href={cCheckins[0].top_video_url} target='_blank' rel='noreferrer' style={{color:C.accent,textDecoration:'none',fontSize:13}}>🔗 {cCheckins[0].top_video_url.slice(0,60)}...</a>
+          {cCheckins[0].top_video_notes&&<p style={{margin:'6px 0 0',fontSize:13,color:C.sub,lineHeight:1.5}}>{cCheckins[0].top_video_notes}</p>}
         </div>}
       </Card>}
 
-      {/* ADMIN CONTEXT — THE "WHY" */}
-      {review.admin_context&&<Card glow style={{marginBottom:14}}>
-        <SH>Why This is Working — From Leadership</SH>
-        <p style={{fontSize:14,lineHeight:1.8,margin:0}}>{review.admin_context}</p>
-      </Card>}
-
-      {/* AI LOADING */}
-      {aiLoading&&<Card style={{textAlign:'center',padding:50,marginBottom:14}}>
-        <div style={{display:'inline-block',animation:'spin 1s linear infinite',fontSize:22,marginBottom:8}}>⟳</div>
-        <div style={{color:C.sub,fontSize:14}}>Building your learning prompts...</div>
-      </Card>}
-
-      {/* SNAPSHOT */}
-      {snapshot&&!aiLoading&&<Card glow style={{marginBottom:14}}>
-        <SH>This Period's Snapshot</SH>
-        <p style={{margin:0,lineHeight:1.7,fontSize:14}}>{snapshot}</p>
-      </Card>}
-
-      {/* LEARNING PROMPTS */}
-      {prompts.length>0&&!aiLoading&&<Card style={{marginBottom:14}}>
-        <SH>Learning Prompts — Go Deep</SH>
-        <p style={{fontSize:12,color:C.muted,marginBottom:20,lineHeight:1.5}}>Don't just skim — study the data and top performers above, then give thoughtful answers. This is how you level up.</p>
-        {prompts.map((q,i)=><div key={i} style={{marginBottom:24}}>
-          <div style={{fontSize:14,fontWeight:600,marginBottom:10,lineHeight:1.6}}>
-            <span style={{color:C.accent,marginRight:10,fontFamily:F.display,fontSize:16}}>{i+1}</span>{q}
-          </div>
-          <Txa value={answers[i]||''} onChange={e=>{const n=[...answers];n[i]=e.target.value;setAnswers(n)}} disabled={!!existing} placeholder={existing?'':'Take your time with this one...'} style={{minHeight:85,opacity:existing?0.85:1}}/>
-        </div>)}
-
-        <Dv/>
-
-        <div>
-          <div style={{fontSize:15,fontWeight:600,marginBottom:10}}>
-            <span style={{color:C.accent,marginRight:10}}>→</span>Key Takeaway
-          </div>
-          <p style={{fontSize:12,color:C.muted,marginBottom:8}}>What's your #1 learning from this review? What will you do differently?</p>
-          <Txa value={takeaway} onChange={e=>setTakeaway(e.target.value)} disabled={!!existing} placeholder={existing?'':"Summarize your biggest insight..."} style={{minHeight:70,borderColor:C.accentMed}}/>
+      {/* Creators */}
+      {clientCreators.length>0&&<Card style={{marginBottom:14}}>
+        <SH color={C.purple}>Creators ({clientCreators.length})</SH>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>
+          {clientCreators.map(cr=>{
+            const cc=creatorCheckins.filter(c=>c.creator_id===cr.id).sort((a,b)=>new Date(b.checkin_date)-new Date(a.checkin_date));
+            const lat=cc[0];const prev=cc[1];
+            const followerDelta=lat&&prev&&prev.follower_count>0?((lat.follower_count-prev.follower_count)/prev.follower_count)*100:null;
+            const creatorHealth=!lat?'grey':followerDelta!==null&&followerDelta<-5?'red':followerDelta!==null&&followerDelta<-2?'yellow':'green';
+            return<div key={cr.id} style={{background:C.alt,borderRadius:10,padding:'14px 16px',border:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <HealthDot status={creatorHealth} size={8}/>
+                <span style={{fontWeight:600,fontSize:13}}>{cr.name}</span>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:6}}>@{cr.tiktok_handle||'—'}</div>
+              {lat?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:4}}>
+                <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Followers</div><div style={{fontSize:12,fontWeight:600}}>{lat.follower_count>=1000?(lat.follower_count/1000).toFixed(1)+'K':lat.follower_count}</div></div>
+                <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Views</div><div style={{fontSize:12,fontWeight:600}}>{lat.views>=1000?(lat.views/1000).toFixed(1)+'K':lat.views}</div></div>
+                <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Likes</div><div style={{fontSize:12,fontWeight:600}}>{lat.likes>=1000?(lat.likes/1000).toFixed(1)+'K':lat.likes}</div></div>
+              </div>:<div style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>No data yet</div>}
+            </div>;
+          })}
         </div>
+      </Card>}
 
-        {!existing&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:24}}>
-          <Btn disabled={!allDone} onClick={submit} sx={{padding:'14px 36px',fontSize:14}}>Submit Learnings</Btn>
-        </div>}
+      {/* Check-in History */}
+      {cCheckins.length>0&&<Card>
+        <SH>Check-In History</SH>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr 1fr 1fr',gap:'8px 16px',fontSize:12}}>
+          <div style={{color:C.muted,fontWeight:700,fontSize:10,textTransform:'uppercase'}}>Date</div>
+          <div style={{color:C.muted,fontWeight:700,fontSize:10,textTransform:'uppercase'}}>Views 48h</div>
+          <div style={{color:C.muted,fontWeight:700,fontSize:10,textTransform:'uppercase'}}>Likes 48h</div>
+          <div style={{color:C.muted,fontWeight:700,fontSize:10,textTransform:'uppercase'}}>Top Video</div>
+          {cCheckins.slice(0,10).map((c,i)=>{
+            const prev=cCheckins[i+1];
+            const vColor=!prev?C.text:c.views_48h>=prev.views_48h?C.green:C.red;
+            const lColor=!prev?C.text:c.likes_48h>=prev.likes_48h?C.green:C.red;
+            return<React.Fragment key={c.id}>
+              <div style={{color:C.sub}}>{new Date(c.checkin_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+              <div style={{color:vColor,fontWeight:600}}>{c.views_48h?.toLocaleString()}</div>
+              <div style={{color:lColor,fontWeight:600}}>{c.likes_48h?.toLocaleString()}</div>
+              <div>{c.top_video_url?<a href={c.top_video_url} target='_blank' rel='noreferrer' style={{color:C.accent,textDecoration:'none'}}>🔗 Link</a>:<span style={{color:C.muted}}>—</span>}</div>
+            </React.Fragment>;
+          })}
+        </div>
       </Card>}
     </div>;
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // PM: LEARNINGS HISTORY
+  // ADMIN: MANAGE CREATORS
   // ═══════════════════════════════════════════════════════════════════
-  function HistoryView(){
-    const mine=isPM;
-    const all=mine?learnings.filter(l=>l.pm_id===user?.id):learnings;
-    const filtered=selClientFilter?all.filter(l=>l.client_id===selClientFilter):all;
-    const filterClients=mine?myClients:clients;
+  function ManageCreatorsView(){
+    const[clientId,setClientId]=useState(clients[0]?.id||'');
+    const[newName,setNewName]=useState('');
+    const[newHandle,setNewHandle]=useState('');
+    const clientCreators=creators.filter(c=>c.client_id===clientId);
+    const active=clientCreators.filter(c=>c.status==='active');
+    const removed=clientCreators.filter(c=>c.status==='removed');
 
-    return<div style={{maxWidth:820}}>
+    const addCreator=async()=>{
+      if(!newName.trim()||!clientId)return;
+      const id=`cr_${Date.now()}`;
+      const row={id,name:newName.trim(),tiktok_handle:newHandle.trim().replace('@',''),client_id:clientId,status:'active'};
+      await sb.from('creators').insert(row);
+      setCreators(p=>[...p,{...row,created_at:new Date().toISOString()}]);
+      setNewName('');setNewHandle('');
+    };
+
+    const removeCreator=async(id)=>{
+      await sb.from('creators').update({status:'removed'}).eq('id',id);
+      setCreators(p=>p.map(c=>c.id===id?{...c,status:'removed'}:c));
+    };
+
+    const restoreCreator=async(id)=>{
+      await sb.from('creators').update({status:'active'}).eq('id',id);
+      setCreators(p=>p.map(c=>c.id===id?{...c,status:'active'}:c));
+    };
+
+    return<div style={{maxWidth:700}}>
       <Btn variant='ghost' onClick={()=>nav('dashboard')}>← Back</Btn>
-      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>{mine?'My Learnings':'PM Learnings'}</h1>
-      <p style={{color:C.sub,marginBottom:20}}>{mine?'Your growth over time — every insight adds up.':'See how your PMs are developing their strategic thinking.'}</p>
+      <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:'20px 0 4px'}}>Manage Creators</h1>
+      <p style={{color:C.sub,marginBottom:24}}>Add creators to clients so PMs can track them.</p>
 
-      {/* Filter */}
-      <div style={{display:'flex',gap:8,marginBottom:24,flexWrap:'wrap'}}>
-        <Btn variant={!selClientFilter?'primary':'outline'} onClick={()=>setSelClientFilter(null)} sx={{fontSize:11,padding:'6px 14px'}}>All Clients</Btn>
-        {filterClients.map(cl=><Btn key={cl.id} variant={selClientFilter===cl.id?'primary':'outline'} onClick={()=>setSelClientFilter(cl.id)} sx={{fontSize:11,padding:'6px 14px'}}>{cl.name}</Btn>)}
+      <div style={{marginBottom:20}}><Label>Client</Label>
+        <Sel value={clientId} onChange={e=>setClientId(e.target.value)}>{clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name} ({creators.filter(c=>c.client_id===cl.id&&c.status==='active').length} creators)</option>)}</Sel>
       </div>
 
-      {filtered.length===0&&<Card style={{textAlign:'center',padding:50}}><div style={{color:C.muted,fontSize:14}}>No learnings yet{mine?' — complete your first review to start building history.':'.'}</div></Card>}
+      <Card style={{marginBottom:16}}>
+        <SH>Add Creator</SH>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:10,alignItems:'end'}}>
+          <div><Label>Name</Label><Inp value={newName} onChange={e=>setNewName(e.target.value)} placeholder='Creator name'/></div>
+          <div><Label>TikTok Handle</Label><Inp value={newHandle} onChange={e=>setNewHandle(e.target.value)} placeholder='@handle'/></div>
+          <Btn disabled={!newName.trim()} onClick={addCreator} sx={{marginBottom:1}}>Add</Btn>
+        </div>
+      </Card>
 
-      {filtered.map(l=>{
-        const client=clients.find(c=>c.id===l.client_id);
-        const pm=getPM(l.pm_id);
-        return<Card key={l.id} style={{marginBottom:16}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontWeight:600,fontSize:16}}>{client?.name}</span>
-              {!mine&&<Badge label={pm?.name} color={C.blue} bg={C.blueDim}/>}
-              <span style={{fontSize:11,color:C.muted}}>{new Date(l.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-            </div>
-          </div>
+      {active.length>0&&<Card style={{marginBottom:16}}>
+        <SH color={C.green}>Active Creators ({active.length})</SH>
+        {active.map(cr=><div key={cr.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+          <div><span style={{fontWeight:600}}>{cr.name}</span><span style={{color:C.muted,marginLeft:8,fontSize:12}}>@{cr.tiktok_handle||'—'}</span></div>
+          <Btn variant='danger' onClick={()=>removeCreator(cr.id)} sx={{fontSize:11,padding:'4px 12px'}}>Remove</Btn>
+        </div>)}
+      </Card>}
 
-          {l.snapshot&&<div style={{background:C.accentGlow,borderRadius:8,padding:'12px 16px',marginBottom:14,fontSize:13,lineHeight:1.6,border:`1px solid ${C.accentMed}`}}>{l.snapshot}</div>}
-
-          {l.key_takeaway&&<div style={{marginBottom:14,padding:'12px 16px',background:C.alt,borderRadius:8,borderLeft:`3px solid ${C.accent}`}}>
-            <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:4}}>Key Takeaway</div>
-            <p style={{margin:0,fontSize:14,lineHeight:1.6}}>{l.key_takeaway}</p>
-          </div>}
-
-          {l.prompts?.map((q,i)=><div key={i} style={{marginBottom:10}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:4}}>{i+1}. {q}</div>
-            <div style={{fontSize:13,lineHeight:1.6,color:C.sub,paddingLeft:14,borderLeft:`2px solid ${C.border}`}}>{l.answers?.[i]||'—'}</div>
-          </div>)}
-        </Card>;
-      })}
+      {removed.length>0&&<Card>
+        <SH color={C.muted}>Removed ({removed.length})</SH>
+        {removed.map(cr=><div key={cr.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${C.border}`,opacity:0.5}}>
+          <div><span>{cr.name}</span><span style={{color:C.muted,marginLeft:8,fontSize:12}}>@{cr.tiktok_handle||'—'}</span></div>
+          <Btn variant='ghost' onClick={()=>restoreCreator(cr.id)} sx={{fontSize:11}}>Restore</Btn>
+        </div>)}
+      </Card>}
     </div>;
   }
 
@@ -505,64 +464,107 @@ Return ONLY JSON: {"snapshot":"...","prompts":["...","...","...","...","..."]}`;
   // DASHBOARD
   // ═══════════════════════════════════════════════════════════════════
   function DashboardView(){
+    const healthMap=useMemo(()=>{
+      const m={};clients.forEach(cl=>{m[cl.id]=calcHealth(cl,clientCheckins,creatorCheckins,creators)});return m;
+    },[clients,clientCheckins,creatorCheckins,creators]);
+
+    const needsCheckin=isPM?myClients.filter(cl=>!hasCheckedIn(cl.id)):[];
+    const redClients=clients.filter(cl=>healthMap[cl.id]?.status==='red');
+    const yellowClients=clients.filter(cl=>healthMap[cl.id]?.status==='yellow');
+
+    // Sort: red first, yellow, green, grey
+    const sorted=[...myClients].sort((a,b)=>{
+      const order={red:0,yellow:1,green:2,grey:3};
+      return(order[healthMap[a.id]?.status]||3)-(order[healthMap[b.id]?.status]||3);
+    });
+
     return<div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
         <div>
-          <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>{isPM?'Your Reviews':'Client Dashboard'}</h1>
+          <h1 style={{fontFamily:F.display,fontSize:28,fontWeight:600,margin:0}}>Command Center</h1>
           <p style={{color:C.sub,marginTop:4,fontSize:13}}>
-            {isAdmin?`${reviews.length} reviews published · ${learnings.length} PM learnings`
-            :isPM&&pendingForPM.length>0?`${pendingForPM.length} new review${pendingForPM.length!==1?'s':''} waiting for you`
-            :isPM?'All caught up — check your learnings history!'
-            :''}
+            {isAdmin?`${redClients.length} needs attention · ${yellowClients.length} watch · ${clients.length-redClients.length-yellowClients.length} healthy`
+            :isPM&&needsCheckin.length>0?`${needsCheckin.length} client${needsCheckin.length>1?'s':''} need check-in today`
+            :'All checked in today ✓'}
           </p>
         </div>
-        {isAdmin&&<Btn variant='outline' onClick={refreshSheet} sx={{fontSize:12}}>{sheetRefreshing?'Refreshing...':'⟳ Refresh Sheet'}</Btn>}
+        {isAdmin&&<Btn variant='outline' onClick={refreshSheet} sx={{fontSize:12}}>{sheetRefreshing?'⟳...':'⟳ Refresh Sheet'}</Btn>}
       </div>
 
-      {/* PM: PENDING REVIEWS */}
-      {isPM&&pendingForPM.length>0&&<div style={{marginBottom:32}}>
-        <SH color={C.accent}>New Reviews — Ready for You</SH>
-        {pendingForPM.map(r=>{
-          const cl=clients.find(c=>c.id===r.client_id);
-          return<Card key={r.id} hoverable onClick={()=>{setSelReview(r);setAiResult(null);setView('pmLearning')}} style={{padding:'18px 22px',marginBottom:10,borderColor:C.accentMed}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
-                <span style={{fontWeight:600,fontSize:16}}>{cl?.name}</span>
-                <span style={{color:C.sub,fontSize:12}}>{new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-              </div>
-              <Badge label='New' color={C.accent} bg={C.accentDim}/>
-            </div>
-            {r.admin_context&&<p style={{margin:'8px 0 0',fontSize:12,color:C.muted,lineHeight:1.5}}>{r.admin_context.slice(0,120)}{r.admin_context.length>120?'...':''}</p>}
-          </Card>;
-        })}
+      {/* PM: Check-in prompt */}
+      {isPM&&needsCheckin.length>0&&<div style={{marginBottom:24}}>
+        <SH color={C.accent}>Today's Check-Ins</SH>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+          {needsCheckin.map(cl=><Btn key={cl.id} variant='outline' onClick={()=>{setSelClient(cl);setView('checkin')}} sx={{padding:'10px 18px'}}>{cl.name} →</Btn>)}
+        </div>
       </div>}
 
-      {/* CLIENT CARDS */}
-      <SH>{isAdmin?'All Clients':'Your Clients'}</SH>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
-        {myClients.map(cl=>{
-          const scope=scopeData[cl.id];
-          const clientReviews=reviews.filter(r=>r.client_id===cl.id);
-          const clientLearnings=learnings.filter(l=>l.client_id===cl.id&&(isPM?l.pm_id===user?.id:true));
-          const hasPending=isPM&&clientReviews.some(r=>!learnings.find(l=>l.review_id===r.id&&l.pm_id===user?.id));
-          const latestReview=clientReviews[0];
+      {/* Summary bar */}
+      {isAdmin&&<div style={{display:'flex',gap:12,marginBottom:24}}>
+        <div style={{flex:1,background:C.redDim,border:`1px solid ${C.redSoft}`,borderRadius:10,padding:'14px 18px',textAlign:'center'}}>
+          <div style={{fontSize:24,fontWeight:700,color:C.red}}>{redClients.length}</div>
+          <div style={{fontSize:10,color:C.red,fontWeight:600,textTransform:'uppercase',marginTop:2}}>Needs Attention</div>
+        </div>
+        <div style={{flex:1,background:C.yellowDim,border:`1px solid ${C.yellowSoft}`,borderRadius:10,padding:'14px 18px',textAlign:'center'}}>
+          <div style={{fontSize:24,fontWeight:700,color:C.yellow}}>{yellowClients.length}</div>
+          <div style={{fontSize:10,color:C.yellow,fontWeight:600,textTransform:'uppercase',marginTop:2}}>Watch</div>
+        </div>
+        <div style={{flex:1,background:C.greenDim,border:`1px solid ${C.greenSoft}`,borderRadius:10,padding:'14px 18px',textAlign:'center'}}>
+          <div style={{fontSize:24,fontWeight:700,color:C.green}}>{clients.length-redClients.length-yellowClients.length}</div>
+          <div style={{fontSize:10,color:C.green,fontWeight:600,textTransform:'uppercase',marginTop:2}}>Healthy</div>
+        </div>
+      </div>}
 
-          return<Card key={cl.id} hoverable={isPM&&!!hasPending} onClick={()=>{
-            if(isPM&&hasPending&&latestReview){
-              const pending=clientReviews.find(r=>!learnings.find(l=>l.review_id===r.id&&l.pm_id===user?.id));
-              if(pending){setSelReview(pending);setAiResult(null);setView('pmLearning')}
-            }
-          }} style={{borderColor:hasPending?C.accentMed:C.border,position:'relative'}}>
-            {hasPending&&<div style={{position:'absolute',top:12,right:12}}><Badge label='Review Pending' color={C.accent} bg={C.accentDim}/></div>}
-            <div style={{fontSize:16,fontWeight:600,marginBottom:2}}>{cl.name}</div>
-            {cl.industry&&<div style={{fontSize:11,color:C.muted,marginBottom:2}}>{cl.industry}</div>}
-            {isAdmin&&<div style={{fontSize:11,color:C.sub,marginBottom:8}}>PM: {getPM(cl.assigned_pm)?.name}</div>}
-            {scope&&<div style={{marginTop:6,marginBottom:8}}><ScopeBar current={scope.live_posts} goal={scope.scope_goal}/></div>}
-            <div style={{display:'flex',gap:16,fontSize:12,color:C.sub,marginTop:8}}>
-              <span>{clientReviews.length} review{clientReviews.length!==1?'s':''}</span>
-              <span>·</span>
-              <span>{clientLearnings.length} learning{clientLearnings.length!==1?'s':''}</span>
+      {/* Client cards */}
+      <SH>{isAdmin?'All Clients':'Your Clients'}</SH>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+        {sorted.map(cl=>{
+          const h=healthMap[cl.id];
+          const scope=scopeData[cl.id];
+          const pm=getPM(cl.assigned_pm);
+          const clientCreatorsCount=creators.filter(c=>c.client_id===cl.id&&c.status==='active').length;
+          const checkedToday=hasCheckedIn(cl.id);
+
+          return<Card key={cl.id} health={h?.status} hoverable onClick={()=>{setSelClient(cl);setView(isPM&&!checkedToday?'checkin':'clientDetail')}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <HealthDot status={h?.status}/>
+                <div>
+                  <div style={{fontSize:15,fontWeight:600}}>{cl.name}</div>
+                  {cl.industry&&<div style={{fontSize:11,color:C.muted}}>{cl.industry}</div>}
+                </div>
+              </div>
+              {isPM&&checkedToday&&<Badge label='✓ Done' color={C.green} bg={C.greenDim}/>}
             </div>
+
+            {isAdmin&&<div style={{fontSize:11,color:C.sub,marginBottom:8}}>PM: {pm?.name||'—'} · {clientCreatorsCount} creator{clientCreatorsCount!==1?'s':''}</div>}
+
+            {/* Quick metrics */}
+            {h?.latest&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
+              <div style={{background:C.alt,borderRadius:6,padding:'8px 10px'}}>
+                <div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Views 48h</div>
+                <div style={{fontSize:14,fontWeight:600,marginTop:2}}>{h.latest.views_48h>=1000?(h.latest.views_48h/1000).toFixed(1)+'K':h.latest.views_48h}</div>
+                {h.prev&&<div style={{fontSize:10,color:h.latest.views_48h>=h.prev.views_48h?C.green:C.red,marginTop:2}}>{h.latest.views_48h>=h.prev.views_48h?'↑':'↓'} vs prev</div>}
+              </div>
+              <div style={{background:C.alt,borderRadius:6,padding:'8px 10px'}}>
+                <div style={{fontSize:9,color:C.muted,textTransform:'uppercase'}}>Likes 48h</div>
+                <div style={{fontSize:14,fontWeight:600,marginTop:2}}>{h.latest.likes_48h>=1000?(h.latest.likes_48h/1000).toFixed(1)+'K':h.latest.likes_48h}</div>
+                {h.prev&&<div style={{fontSize:10,color:h.latest.likes_48h>=h.prev.likes_48h?C.green:C.red,marginTop:2}}>{h.latest.likes_48h>=h.prev.likes_48h?'↑':'↓'} vs prev</div>}
+              </div>
+            </div>}
+
+            {!h?.latest&&<div style={{color:C.muted,fontSize:12,fontStyle:'italic',marginTop:6}}>No data yet</div>}
+
+            {/* Health flag */}
+            {h?.issues?.length>0&&<div style={{marginTop:10,padding:'6px 10px',borderRadius:6,background:h.status==='red'?C.redDim:C.yellowDim,fontSize:11,color:h.status==='red'?C.red:C.yellow,fontWeight:500}}>{h.issues[0]}</div>}
+
+            {/* Scope mini */}
+            {scope&&<div style={{marginTop:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted,marginBottom:3}}>
+                <span>Scope</span><span>{scope.live_posts}/{scope.scope_goal}</span>
+              </div>
+              <div style={{height:4,background:C.border,borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.min((scope.live_posts/scope.scope_goal)*100,100)}%`,background:scope.live_posts>=scope.scope_goal*0.9?C.green:scope.live_posts>=scope.scope_goal*0.6?C.yellow:C.red,borderRadius:2}}/></div>
+            </div>}
           </Card>;
         })}
       </div>
@@ -573,35 +575,31 @@ Return ONLY JSON: {"snapshot":"...","prompts":["...","...","...","...","..."]}`;
   // LAYOUT
   // ═══════════════════════════════════════════════════════════════════
   const sidebar=isAdmin
-    ?[{id:'dashboard',label:'Dashboard',icon:'◉'},{id:'adminUpload',label:'Upload Review',icon:'▶'},{id:'history',label:'PM Learnings',icon:'★'}]
-    :[{id:'dashboard',label:'My Reviews',icon:'◉'},{id:'history',label:'My Learnings',icon:'★'}];
+    ?[{id:'dashboard',label:'Dashboard',icon:'◉'},{id:'creators',label:'Manage Creators',icon:'♦'}]
+    :[{id:'dashboard',label:'Dashboard',icon:'◉'}];
 
   return<div style={{fontFamily:F.body,background:C.bg,color:C.text,minHeight:'100vh',fontSize:14}}>
-    {/* SIDEBAR */}
-    <div style={{width:240,background:C.surface,borderRight:`1px solid ${C.border}`,height:'100vh',position:'fixed',left:0,top:0,display:'flex',flexDirection:'column',zIndex:10}}>
+    <div style={{width:220,background:C.surface,borderRight:`1px solid ${C.border}`,height:'100vh',position:'fixed',left:0,top:0,display:'flex',flexDirection:'column',zIndex:10}}>
       <div style={{padding:'20px 16px',borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontSize:11,fontWeight:700,color:C.accent,letterSpacing:'0.14em',textTransform:'uppercase'}}>BW Club</div>
-        <div style={{fontSize:14,fontWeight:600,marginTop:3}}>PM Learning Portal</div>
+        <div style={{fontSize:14,fontWeight:600,marginTop:3}}>Command Center</div>
       </div>
       <nav style={{padding:'12px 8px',flex:1}}>
-        {sidebar.map(item=><div key={item.id} onClick={()=>nav(item.id)} style={{padding:'9px 12px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,fontSize:13,fontWeight:view===item.id||view==='pmLearning'&&item.id==='dashboard'?600:400,color:view===item.id||view==='pmLearning'&&item.id==='dashboard'?C.text:C.sub,background:view===item.id||view==='pmLearning'&&item.id==='dashboard'?C.hover:'transparent',transition:'all 0.15s'}} onMouseEnter={e=>{e.currentTarget.style.background=C.hover}} onMouseLeave={e=>{if(view!==item.id&&!(view==='pmLearning'&&item.id==='dashboard'))e.currentTarget.style.background='transparent'}}>
+        {sidebar.map(item=><div key={item.id} onClick={()=>nav(item.id)} style={{padding:'9px 12px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,fontSize:13,fontWeight:['dashboard','creators'].includes(view)&&view===item.id||view==='clientDetail'&&item.id==='dashboard'||view==='checkin'&&item.id==='dashboard'?600:400,color:['dashboard','clientDetail','checkin'].includes(view)&&item.id==='dashboard'||view===item.id?C.text:C.sub,background:['dashboard','clientDetail','checkin'].includes(view)&&item.id==='dashboard'||view===item.id?C.hover:'transparent'}} onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>{const active=['dashboard','clientDetail','checkin'].includes(view)&&item.id==='dashboard'||view===item.id;if(!active)e.currentTarget.style.background='transparent'}}>
           <span style={{fontSize:12,width:16,textAlign:'center'}}>{item.icon}</span>{item.label}
-          {item.id==='dashboard'&&isPM&&pendingForPM.length>0&&<span style={{marginLeft:'auto',background:C.accent,color:C.bg,fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10}}>{pendingForPM.length}</span>}
         </div>)}
       </nav>
       <div style={{padding:'12px',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}>
         <div style={{width:32,height:32,borderRadius:'50%',background:isAdmin?C.accentDim:C.blueDim,color:isAdmin?C.accent:C.blue,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>{user.avatar}</div>
         <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{user.name}</div><div style={{fontSize:10,color:C.muted}}>{user.title}</div></div>
-        <Btn variant='ghost' onClick={()=>{setUser(null);nav('dashboard')}} sx={{padding:'4px 8px',fontSize:10}}>Switch</Btn>
+        <Btn variant='ghost' onClick={()=>{setUser(null);nav('dashboard')}} sx={{padding:'4px 8px',fontSize:10}}>⏻</Btn>
       </div>
     </div>
-
-    {/* MAIN */}
-    <div style={{marginLeft:240,minHeight:'100vh',padding:'28px 36px'}}>
+    <div style={{marginLeft:220,minHeight:'100vh',padding:'28px 36px'}}>
       {view==='dashboard'&&<DashboardView/>}
-      {view==='adminUpload'&&isAdmin&&<AdminUploadView/>}
-      {view==='pmLearning'&&isPM&&<PMLearningView/>}
-      {view==='history'&&<HistoryView/>}
+      {view==='checkin'&&isPM&&<CheckinView/>}
+      {view==='clientDetail'&&<ClientDetailView/>}
+      {view==='creators'&&isAdmin&&<ManageCreatorsView/>}
     </div>
   </div>;
 }
